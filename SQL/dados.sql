@@ -36,6 +36,7 @@ INSERT INTO Tartaruga (codigo_anilha, peso, tamanho_casco, sexo, nome_cientifico
 -- Pessoas que serão Artesãos
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('11111111111', 'Ana Maria', TO_DATE('1980-05-10', 'YYYY-MM-DD'), 'Artesão', NULL);
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('22222222222', 'José Silva', TO_DATE('1975-08-22', 'YYYY-MM-DD'), 'Artesão', NULL);
+INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('12312312312', 'Helena Costa', TO_DATE('1992-08-14', 'YYYY-MM-DD'), NULL, NULL);
 
 -- Pessoas que serão Funcionários
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('33333333333', 'Carlos Souza', TO_DATE('1990-11-15', 'YYYY-MM-DD'), 'Funcionário', NULL);
@@ -72,9 +73,13 @@ INSERT INTO Auxilia (CPF_Func, CPF_Pesq) VALUES ('10101010101', '66666666666');
 -- Alimentação de Interações Comerciais e Visitação
 INSERT INTO Vende_para (CPF, UF, cidade) VALUES ('77777777777', 'BA', 'Praia do Forte');
 INSERT INTO Vende_para (CPF, UF, cidade) VALUES ('88888888888', 'ES', 'Regência');
+INSERT INTO Vende_para (CPF, UF, cidade) VALUES ('12312312312', 'BA', 'Praia do Forte');
+INSERT INTO Vende_para (CPF, UF, cidade) VALUES ('12312312312', 'ES', 'Regência');
 
 INSERT INTO Pedido (CPF, UF, cidade, data_hora, valor) VALUES ('77777777777', 'BA', 'Praia do Forte', TO_TIMESTAMP('2024-06-15 14:30:00', 'YYYY-MM-DD HH24:MI:SS'), 120.50);
 INSERT INTO Pedido (CPF, UF, cidade, data_hora, valor) VALUES ('88888888888', 'ES', 'Regência', TO_TIMESTAMP('2024-06-16 10:15:00', 'YYYY-MM-DD HH24:MI:SS'), 85.00);
+INSERT INTO Pedido (CPF, UF, cidade, data_hora, valor) VALUES ('12312312312', 'BA', 'Praia do Forte', TO_TIMESTAMP('2024-07-01 10:00:00', 'YYYY-MM-DD HH24:MI:SS'), 150.00);
+INSERT INTO Pedido (CPF, UF, cidade, data_hora, valor) VALUES ('12312312312', 'ES', 'Regência', TO_TIMESTAMP('2024-07-05 14:00:00', 'YYYY-MM-DD HH24:MI:SS'), 200.00);
 
 INSERT INTO Visita (CPF, UF, cidade) VALUES ('77777777777', 'BA', 'Arembepe');
 INSERT INTO Visita (CPF, UF, cidade) VALUES ('88888888888', 'ES', 'Guriri');
