@@ -31,12 +31,13 @@ INSERT INTO Tartaruga (codigo_anilha, peso, tamanho_casco, sexo, nome_cientifico
 INSERT INTO Tartaruga (codigo_anilha, peso, tamanho_casco, sexo, nome_cientifico) VALUES ('BR0002', 110.0, 105.0, 'M', 'Chelonia mydas');
 -- Inserindo uma terceira tartaruga fêmea para os dois eventos de desova
 INSERT INTO Tartaruga (codigo_anilha, peso, tamanho_casco, sexo, nome_cientifico) VALUES ('BR0003', 75.5, 88.0, 'F', 'Caretta caretta');
+INSERT INTO Tartaruga (codigo_anilha, peso, tamanho_casco, sexo, nome_cientifico) VALUES ('BR0004', 60.0, 75.0, 'F', 'Caretta caretta');
+INSERT INTO Tartaruga (codigo_anilha, peso, tamanho_casco, sexo, nome_cientifico) VALUES ('BR0005', 45.0, 60.0, 'M', 'Chelonia mydas');
 
 -- Alimentação da Tabela Pessoa (Generalista)
 -- Pessoas que serão Artesãos
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('11111111111', 'Ana Maria', TO_DATE('1980-05-10', 'YYYY-MM-DD'), 'Artesão', NULL);
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('22222222222', 'José Silva', TO_DATE('1975-08-22', 'YYYY-MM-DD'), 'Artesão', NULL);
-INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('12312312312', 'Helena Costa', TO_DATE('1992-08-14', 'YYYY-MM-DD'), NULL, NULL);
 
 -- Pessoas que serão Funcionários
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('33333333333', 'Carlos Souza', TO_DATE('1990-11-15', 'YYYY-MM-DD'), 'Funcionário', NULL);
@@ -47,10 +48,12 @@ INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('101
 -- Pessoas que serão Pesquisadores
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('55555555555', 'Fernanda Carrilho', TO_DATE('1985-07-30', 'YYYY-MM-DD'), 'Pesquisador', NULL);
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('66666666666', 'Roberto Vargas', TO_DATE('1982-12-10', 'YYYY-MM-DD'), 'Pesquisador', NULL);
+INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('12121212121', 'Marcos Sênior', TO_DATE('1970-03-22', 'YYYY-MM-DD'), 'Pesquisador', NULL);
 
 -- Pessoas que serão Visitantes/Clientes
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('77777777777', 'Marcos Paulo', TO_DATE('2000-01-20', 'YYYY-MM-DD'), NULL, 'Estudante');
 INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('88888888888', 'Lucia Alves', TO_DATE('1960-04-12', 'YYYY-MM-DD'), NULL, 'Idoso');
+INSERT INTO Pessoa (CPF, Nome, Data_nascim, Funcao, Prioridade_lei) VALUES ('12312312312', 'Helena Costa', TO_DATE('1992-08-14', 'YYYY-MM-DD'), NULL, NULL);
 
 -- Alimentação das Especializações de Pessoa
 INSERT INTO Artesao (CPF, subsidio, UF, cidade) VALUES ('11111111111', 500.00, 'BA', 'Praia do Forte');
@@ -66,6 +69,7 @@ INSERT INTO Funcionario (CPF, data_ini, atuacao, remuneracao, UF, cidade) VALUES
 
 INSERT INTO Pesquisador (CPF, formacao, remuneracao) VALUES ('55555555555', 'Biologia Marinha', 7500.00);
 INSERT INTO Pesquisador (CPF, formacao, remuneracao) VALUES ('66666666666', 'Oceanografia', 8000.00);
+INSERT INTO Pesquisador (CPF, formacao, remuneracao) VALUES ('12121212121', 'Doutorado em Biologia Marinha', 12000.00);
 
 INSERT INTO Auxilia (CPF_Func, CPF_Pesq) VALUES ('99999999999', '55555555555');
 INSERT INTO Auxilia (CPF_Func, CPF_Pesq) VALUES ('10101010101', '66666666666');
@@ -98,6 +102,9 @@ INSERT INTO Classificacoes (codigo_anilha, data_hora, classificacao) VALUES ('BR
 INSERT INTO Classificacoes (codigo_anilha, data_hora, classificacao) VALUES ('BR0001', TO_TIMESTAMP('2024-06-01 23:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'Desova');
 INSERT INTO Classificacoes (codigo_anilha, data_hora, classificacao) VALUES ('BR0003', TO_TIMESTAMP('2024-06-05 22:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'Desova');
 
+INSERT INTO Classificacoes (codigo_anilha, data_hora, classificacao) VALUES ('BR0004', TO_TIMESTAMP('2024-08-10 09:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'Resgate');
+INSERT INTO Classificacoes (codigo_anilha, data_hora, classificacao) VALUES ('BR0005', TO_TIMESTAMP('2024-08-15 14:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'Resgate');
+
 -- Alimentando a tabela Ninho (Necessária para associar à Desova)
 INSERT INTO Ninho (codigo_estaca, lat_long, n_ovos, n_filhotes) VALUES ('EST-001', '-12.57, -38.00', 115, 80);
 INSERT INTO Ninho (codigo_estaca, lat_long, n_ovos, n_filhotes) VALUES ('EST-002', '-10.95, -37.04', 125, 105);
@@ -105,6 +112,8 @@ INSERT INTO Ninho (codigo_estaca, lat_long, n_ovos, n_filhotes) VALUES ('EST-002
 -- Inserindo nas Entidades Especializadas de Evento
 INSERT INTO Resgate_Encalhe (codigo_anilha, data_hora, UF, cidade, CPF_Pesq, motivo, vivo, reabilitacao) VALUES ('BR0001', TO_TIMESTAMP('2024-05-01 08:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'BA', 'Arembepe', '55555555555', 'Presa em rede de emalhe', 'V', 'V');
 INSERT INTO Resgate_Encalhe (codigo_anilha, data_hora, UF, cidade, CPF_Pesq, motivo, vivo, reabilitacao) VALUES ('BR0002', TO_TIMESTAMP('2024-05-02 11:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'ES', 'Vitória', '66666666666', 'Ingestão de plástico', 'V', 'V');
+INSERT INTO Resgate_Encalhe (codigo_anilha, data_hora, UF, cidade, CPF_Pesq, motivo, vivo, reabilitacao) VALUES ('BR0004', TO_TIMESTAMP('2024-08-10 09:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'BA', 'Arembepe', '12121212121', 'Presa em rede fantasma', 'V', 'V');
+INSERT INTO Resgate_Encalhe (codigo_anilha, data_hora, UF, cidade, CPF_Pesq, motivo, vivo, reabilitacao) VALUES ('BR0005', TO_TIMESTAMP('2024-08-15 14:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'ES', 'Vitória', '12121212121', 'Debilidade natural', 'V', 'V');
 
 INSERT INTO Pesca (codigo_anilha, data_hora, UF, cidade, CPF_Pesq, classe, reabilitacao) VALUES ('BR0001', TO_TIMESTAMP('2024-05-10 14:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'BA', 'Arembepe', '55555555555', 'Não Monitorada', 'F');
 INSERT INTO Pesca (codigo_anilha, data_hora, UF, cidade, CPF_Pesq, classe, reabilitacao) VALUES ('BR0002', TO_TIMESTAMP('2024-05-11 16:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'ES', 'Vitória', '66666666666', 'Monitorada', 'F');
