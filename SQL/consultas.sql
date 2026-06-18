@@ -51,3 +51,33 @@ WHERE (n1.n_filhotes / n1.n_ovos) > (
     JOIN Tartaruga t2 ON d2.codigo_anilha = t2.codigo_anilha
     WHERE t2.nome_cientifico = t1.nome_cientifico
 );
+
+/* CONSULTA 3: SUBCONSULTA DERIVADA COM AGREGAÇÃO
+Objetivo: retornar todos os pesquisadores, seus nomes, CPFs, no que atuam (resgate, encalhe ou 
+pesca), remunerações, formações e seus auxiliares 
+
+Justificativa: 
+*/
+SELECT pes.Nome, 
+       pes.CPF, 
+       pesq.remuneracao, 
+       pesq.formacao, 
+       LISTAGG(a.atuacao, ', ') WITHIN GROUP (ORDER BY a.atuacao asc) AS atuacoes
+FROM Pesquisador pesq
+LEFT JOIN Pessoa pes
+ON pesq.CPF = pes.CPF
+JOIN (
+    SELECT r.CPF_Pesq, 'RESGATE' AS atuacao
+    FROM Resgate_Encalhe r
+    UNION
+    SELECT p.CPF_Pesq, 'PESCA' AS atuacao
+    FROM Pesca p
+    UNION
+    SELECT d.CPF_Pesq, 'DESOVA' AS atuacao
+    FROM Desova d
+) a
+ON a.CPF_Pesq = pesq.CPF
+/*LEFT JOIN Auxilia aux 
+ON pesq.CPF = aux.CPF_Pesq*/
+GROUP BY pes.Nome, pes.CPF, pesq.remuneracao, pesq.formacao
+ORDER BY pes.Nome ASC;
