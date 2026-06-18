@@ -5,9 +5,8 @@
 Objetivo: Listar o Nome e CPF dos Pesquisadores que já atuaram em 
 resgates em TODAS as Áreas de Monitoramento do projeto.
  
-Justificativa: Permite mapear os pesquisadores mais experientes e 
-com maior mobilidade geográfica, fundamentais para liderar treinamentos 
-nas diferentes bases litorâneas.*/
+Justificativa: Permite mapear os pesquisadores com maior mobilidade geográfica, 
+fundamentais para liderar treinamentos nas diferentes regiões litorâneas.*/
 
 SELECT p.Nome, p.CPF
 FROM Pessoa p
