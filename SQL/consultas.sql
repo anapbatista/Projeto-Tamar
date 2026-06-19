@@ -56,28 +56,40 @@ WHERE (n1.n_filhotes / n1.n_ovos) > (
 Objetivo: retornar todos os pesquisadores, seus nomes, CPFs, no que atuam (resgate, encalhe ou 
 pesca), remunerações, formações e seus auxiliares 
 
-Justificativa: 
+Justificativa: Permite mapear as informações mais importantes relacionadas aos pesquisadores, como no que 
+atuam e com quem.
 */
-SELECT pes.Nome, 
-       pes.CPF, 
-       pesq.remuneracao, 
-       pesq.formacao, 
-       LISTAGG(a.atuacao, ', ') WITHIN GROUP (ORDER BY a.atuacao asc) AS atuacoes
+SELECT pes.Nome,
+       pes.CPF,
+       pesq.remuneracao,
+       pesq.formacao,
+       a.atuacoes,
+       aux.cpfs_auxiliares,
+       aux.nomes_auxiliares
 FROM Pesquisador pesq
-LEFT JOIN Pessoa pes
-ON pesq.CPF = pes.CPF
-JOIN (
-    SELECT r.CPF_Pesq, 'RESGATE' AS atuacao
-    FROM Resgate_Encalhe r
-    UNION
-    SELECT p.CPF_Pesq, 'PESCA' AS atuacao
-    FROM Pesca p
-    UNION
-    SELECT d.CPF_Pesq, 'DESOVA' AS atuacao
-    FROM Desova d
+JOIN Pessoa pes
+    ON pesq.CPF = pes.CPF
+LEFT JOIN (
+    SELECT CPF_Pesq,
+           LISTAGG(atuacao, ', ') WITHIN GROUP (ORDER BY atuacao) AS atuacoes
+    FROM (
+        SELECT DISTINCT CPF_Pesq, 'RESGATE' AS atuacao FROM Resgate_Encalhe
+        UNION ALL
+        SELECT DISTINCT CPF_Pesq, 'PESCA' FROM Pesca
+        UNION ALL
+        SELECT DISTINCT CPF_Pesq, 'DESOVA' FROM Desova
+    )
+    GROUP BY CPF_Pesq
 ) a
-ON a.CPF_Pesq = pesq.CPF
-/*LEFT JOIN Auxilia aux 
-ON pesq.CPF = aux.CPF_Pesq*/
-GROUP BY pes.Nome, pes.CPF, pesq.remuneracao, pesq.formacao
-ORDER BY pes.Nome ASC;
+    ON a.CPF_Pesq = pesq.CPF
+LEFT JOIN (
+    SELECT CPF_Pesq,
+           LISTAGG(CPF_Func, ', ')  WITHIN GROUP (ORDER BY CPF_Func) AS cpfs_auxiliares,
+           LISTAGG(pes_aux.Nome, ', ')  WITHIN GROUP (ORDER BY pes_aux.Nome) AS nomes_auxiliares
+    FROM Auxilia aux
+    JOIN Pessoa pes_aux
+        ON aux.CPF_Func = pes_aux.CPF
+    GROUP BY CPF_Pesq
+) aux
+    ON aux.CPF_Pesq = pesq.CPF
+ORDER BY pes.Nome;
