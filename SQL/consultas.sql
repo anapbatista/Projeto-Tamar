@@ -250,3 +250,36 @@ LEFT JOIN Desovas_Base db ON db.UF = b.UF
 LEFT JOIN Pescas_Base pes ON pes.UF = b.UF
 LEFT JOIN Tartarugas_Base tb ON tb.UF = b.UF
 ORDER BY arrec_total DESC, b.UF;
+
+
+/*Consulta 5: Tartarugas Reabilitadas com eventos Posteriores}
+Objetivo: identificar tartarugas que, após passarem por um processo 
+de reabilitação e serem registradas como vivas em um evento de resgate ou encalhe,
+continuaram participando de atividades monitoradas de pesca ou desova após o processo de reabilitação */ 
+
+SELECT t.nome_cientifico,
+       r.codigo_anilha,
+       COUNT(e.data_hora) AS qnt_eventos,
+       NVL(SUM(n.n_ovos),0) AS total_ovos
+FROM resgate_encalhe r
+JOIN tartaruga t
+    ON t.codigo_anilha = r.codigo_anilha
+LEFT JOIN (
+    SELECT codigo_anilha, data_hora
+    FROM pesca
+    UNION ALL
+    SELECT codigo_anilha, data_hora
+    FROM desova
+) e
+    ON e.codigo_anilha = r.codigo_anilha
+   AND e.data_hora > r.data_hora
+LEFT JOIN desova d
+    ON d.codigo_anilha = e.codigo_anilha
+   AND d.data_hora = e.data_hora
+LEFT JOIN ninho n
+    ON n.codigo_estaca = d.codigo_estaca
+WHERE r.uf = 'BA'
+  AND r.vivo = 'V'
+  AND r.reabilitacao = 'V'
+GROUP BY t.nome_cientifico, r.codigo_anilha
+HAVING COUNT(e.data_hora) >=1 ;
