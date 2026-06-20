@@ -1,16 +1,21 @@
--- Script: consultas.sql
--- Objetivo: Consultas de média/alta complexidade para o Projeto Tamar
 
-/*CONSULTA 1: DIVISÃO RELACIONAL 
+-- SCRIPT: consultas.sql
+-- OBJETIVO: Consultas de média/alta complexidade para o Projeto Tamar
+
+/* CONSULTA 1: DIVISÃO RELACIONAL 
 Objetivo: Listar o Nome e CPF dos Pesquisadores que já atuaram em 
 resgates em TODAS as Áreas de Monitoramento do projeto.
- 
-Justificativa: Permite mapear os pesquisadores com maior mobilidade geográfica, 
-fundamentais para liderar treinamentos nas diferentes regiões litorâneas.*/
 
-SELECT p.Nome, p.CPF
+Justificativa: Permite mapear os pesquisadores com maior mobilidade 
+geográfica, fundamentais para liderar treinamentos nas diferentes 
+regiões litorâneas.*/
+
+SELECT 
+    p.Nome, 
+    p.CPF
 FROM Pessoa p
-JOIN Pesquisador pq ON p.CPF = pq.CPF
+JOIN Pesquisador pq 
+    ON p.CPF = pq.CPF
 WHERE NOT EXISTS (
     SELECT a.UF, a.cidade
     FROM Area_de_Monitoramento a
@@ -23,14 +28,16 @@ WHERE NOT EXISTS (
     )
 );
 
-/*CONSULTA 2: ANINHADA CORRELACIONADA COM FOCO BIOLÓGICO/CONSERVAÇÃO)
+
+/* CONSULTA 2: ANINHADA CORRELACIONADA (FOCO BIOLÓGICO/CONSERVAÇÃO)
 Objetivo: Identificar as tartarugas e as áreas de monitoramento de 
 seus ninhos que tiveram uma "taxa de eclosão" (percentual de filhotes)
-SUPERIOR à taxa média de eclosão dos ninhos da MESMA ESPÉCIE
+SUPERIOR à taxa média de eclosão dos ninhos da MESMA ESPÉCIE.
 
 Justificativa: Indicador crucial de sucesso reprodutivo. Permite mapear 
 matrizes (fêmeas) altamente férteis ou trechos de praia com condições 
-de incubação ideais.*/
+de incubação ideais. */
+
 SELECT 
     t1.codigo_anilha AS "Código da Tartaruga",
     d1.UF AS "UF (Área de Monitoramento)",
@@ -41,37 +48,47 @@ SELECT
     n1.n_filhotes AS "Total de Filhotes",
     ROUND((n1.n_filhotes / n1.n_ovos) * 100, 2) AS "Taxa de Eclosão (%)"
 FROM Desova d1
-JOIN Ninho n1 ON d1.codigo_estaca = n1.codigo_estaca
-JOIN Tartaruga t1 ON d1.codigo_anilha = t1.codigo_anilha
-JOIN Especie e1 ON e1.nome_cientifico = t1.nome_cientifico
+JOIN Ninho n1 
+    ON d1.codigo_estaca = n1.codigo_estaca
+JOIN Tartaruga t1 
+    ON d1.codigo_anilha = t1.codigo_anilha
+JOIN Especie e1 
+    ON e1.nome_cientifico = t1.nome_cientifico
 WHERE (n1.n_filhotes / n1.n_ovos) > (
     SELECT AVG(n2.n_filhotes / n2.n_ovos)
     FROM Desova d2
-    JOIN Ninho n2 ON d2.codigo_estaca = n2.codigo_estaca
-    JOIN Tartaruga t2 ON d2.codigo_anilha = t2.codigo_anilha
+    JOIN Ninho n2 
+        ON d2.codigo_estaca = n2.codigo_estaca
+    JOIN Tartaruga t2 
+        ON d2.codigo_anilha = t2.codigo_anilha
     WHERE t2.nome_cientifico = t1.nome_cientifico
 );
 
-/* CONSULTA 3: SUBCONSULTA DERIVADA COM AGREGAÇÃO
-Objetivo: retornar todos os pesquisadores, seus nomes, CPFs, no que atuam (resgate, encalhe ou 
-pesca), remunerações, formações e seus auxiliares 
 
-Justificativa: Permite mapear as informações mais importantes relacionadas aos pesquisadores, como no que 
-atuam e com quem.
-*/
-SELECT pes.Nome,
-       pes.CPF,
-       pesq.remuneracao,
-       pesq.formacao,
-       a.atuacoes,
-       aux.cpfs_auxiliares,
-       aux.nomes_auxiliares
+/* CONSULTA 3: SUBCONSULTA DERIVADA COM AGREGAÇÃO
+Objetivo: Retornar todos os pesquisadores, seus nomes, CPFs, no que 
+atuam (resgate/encalhe, pesca ou desova), remunerações, formações e 
+seus respectivos auxiliares.
+
+Justificativa: Permite mapear as informações mais importantes 
+relacionadas aos pesquisadores do projeto, evidenciando suas frentes 
+de atuação e equipes de apoio em campo. */
+
+SELECT 
+    pes.Nome,
+    pes.CPF,
+    pesq.remuneracao,
+    pesq.formacao,
+    a.atuacoes,
+    aux.cpfs_auxiliares,
+    aux.nomes_auxiliares
 FROM Pesquisador pesq
 JOIN Pessoa pes
     ON pesq.CPF = pes.CPF
 LEFT JOIN (
-    SELECT CPF_Pesq,
-           LISTAGG(atuacao, ', ') WITHIN GROUP (ORDER BY atuacao) AS atuacoes
+    SELECT 
+        CPF_Pesq,
+        LISTAGG(atuacao, ', ') WITHIN GROUP (ORDER BY atuacao) AS atuacoes
     FROM (
         SELECT DISTINCT CPF_Pesq, 'RESGATE' AS atuacao FROM Resgate_Encalhe
         UNION ALL
@@ -83,9 +100,10 @@ LEFT JOIN (
 ) a
     ON a.CPF_Pesq = pesq.CPF
 LEFT JOIN (
-    SELECT CPF_Pesq,
-           LISTAGG(CPF_Func, ', ')  WITHIN GROUP (ORDER BY CPF_Func) AS cpfs_auxiliares,
-           LISTAGG(pes_aux.Nome, ', ')  WITHIN GROUP (ORDER BY pes_aux.Nome) AS nomes_auxiliares
+    SELECT 
+        CPF_Pesq,
+        LISTAGG(CPF_Func, ', ') WITHIN GROUP (ORDER BY CPF_Func) AS cpfs_auxiliares,
+        LISTAGG(pes_aux.Nome, ', ') WITHIN GROUP (ORDER BY pes_aux.Nome) AS nomes_auxiliares
     FROM Auxilia aux
     JOIN Pessoa pes_aux
         ON aux.CPF_Func = pes_aux.CPF
@@ -94,192 +112,175 @@ LEFT JOIN (
     ON aux.CPF_Pesq = pesq.CPF
 ORDER BY pes.Nome;
 
-/* CONSULTA 4: RESUMO DAS BASES POR ESTADO 
-Objetivo: Apresentar uma visão geral de cada base estadual, incluindo unidades de atuação, arrecadação, pessoas atendidas, 
-colaboradores, custos da equipe e indicadores de monitoramento ambiental. 
 
-Principais métricas visualizadas: 
+/* CONSULTA 4: RESUMO DAS BASES POR ESTADO (DASHBOARD)
+Objetivo: Apresentar uma visão analítica de cada estado, incluindo 
+unidades de atuação, arrecadação, pessoas atendidas, colaboradores, 
+custos da equipe e indicadores de monitoramento ambiental.
 
-- Quantidade de lojas, museus e áreas de monitoramento 
-- Arrecadação de pedidos e ingressos 
-- Quantidade de clientes e visitantes distintos 
-- Funcionários, pesquisadores e artesãos associados ao estado 
-- Total e média de resgates por área
-- Taxa de reabilitação 
-- Total de desovas e taxa de eclosão 
-- Quantidade de pescas e tartarugas monitoradas 
-- Total de eventos*/
+Justificativa: Fornece uma visão gerencial de alto nível, permitindo 
+cruzar o desempenho financeiro, estrutural e científico de cada Base 
+Regional do projeto. */
 
--- design tabelas 
-SET SQLBLANKLINES ON
-SET LINESIZE 400
-SET PAGESIZE 1000
-SET WRAP OFF
-SET TRIMSPOOL ON
-SET TAB OFF
-SET HEADING ON
-SET FEEDBACK ON
-SET COLSEP ' | '
+WITH 
+-- 1. ESTRUTURA FÍSICA
+CTE_Lojas AS (SELECT UF, COUNT(*) AS qtd_lojas FROM Loja GROUP BY UF),
+CTE_Museus AS (SELECT UF, COUNT(*) AS qtd_museus FROM Museu GROUP BY UF),
+CTE_Areas AS (SELECT UF, COUNT(*) AS qtd_areas FROM Area_de_Monitoramento GROUP BY UF),
 
-COLUMN UF FORMAT A2
-COLUMN CIDADE_BASE FORMAT A14
-COLUMN LOJAS FORMAT 9990
-COLUMN MUSEUS FORMAT 9990
-COLUMN AREAS FORMAT 9990
-COLUMN UNIDADES FORMAT 9990
-COLUMN REC_LOJAS FORMAT 9999990D00
-COLUMN REC_MUSEUS FORMAT 9999990D00
-COLUMN ARREC_TOTAL FORMAT 9999990D00
-COLUMN PESSOAS FORMAT 9999990
-COLUMN TOTAL_FUNC FORMAT 9999990
-COLUMN FUNC_MUSEU FORMAT 9999990
-COLUMN PESQUISADORES FORMAT 9999990
-COLUMN ARTESAOS FORMAT 9999990
-COLUMN CUSTO_EQUIPE FORMAT 99999990D00
-COLUMN RESGATES FORMAT 9999990
-COLUMN MED_RES_AREA FORMAT 999990D00
-COLUMN TX_REAB_RESG FORMAT 999990D00
-COLUMN DESOVAS FORMAT 9999990
-COLUMN TX_ECLOSAO FORMAT 999990D00
-COLUMN PESCAS FORMAT 9999990
-COLUMN TARTARUGAS FORMAT 9999990
-COLUMN EVENTOS FORMAT 9999990
-
--- DISTINCT impede de contarmos o mesmo atributo mais de uma vez
-WITH Estrutura_Base AS(
-    SELECT b.UF, 
-    COUNT(DISTINCT l.UF || '|' || l.cidade) AS lojas, 
-    COUNT(DISTINCT m.UF || '|' || m.cidade) AS museus, 
-    COUNT(DISTINCT a.UF || '|' || a.cidade) AS areas 
-    FROM Base b
-    LEFT JOIN Loja l 
-    ON l.UF = b.UF
-    LEFT JOIN Museu m 
-    ON m.UF = b.UF
-    LEFT JOIN Area_de_Monitoramento a 
-    ON a.UF = b.UF
-    GROUP BY b.UF
+-- 2. FINANCEIRO E PÚBLICO
+CTE_Pedidos AS (
+    SELECT UF, SUM(valor) AS total_pedidos, COUNT(DISTINCT CPF) AS qtd_clientes 
+    FROM Pedido GROUP BY UF
+),
+CTE_Ingressos AS (
+    SELECT UF, SUM(valor) AS total_ingressos, COUNT(DISTINCT CPF) AS qtd_visitantes 
+    FROM Ingresso GROUP BY UF
 ),
 
--- valor total arrecadado pelas lojas, quantidade total de pedidos realizados
--- NVL SE A COLUNA VALOR TIVER NULL SUBSTITUI POR 0, PRA NAO ATRAPALHAR NOSSA SOMA
-Receita_Lojas AS(
-    SELECT UF, SUM(NVL(valor,0)) AS receita,COUNT(*) AS pedidos FROM Pedido 
-    GROUP BY UF
+-- 3. RECURSOS HUMANOS E CUSTOS LOCAIS (Abordagem UNION + CASE WHEN)
+CTE_Pesquisadores_UF AS (
+    SELECT CPF_Pesq AS CPF, UF FROM Resgate_Encalhe UNION
+    SELECT CPF_Pesq AS CPF, UF FROM Pesca UNION
+    SELECT CPF_Pesq AS CPF, UF FROM Desova
 ),
-
-Receita_Museus AS (
-    SELECT UF, SUM(NVL(valor, 0)) AS receita,COUNT(*) AS ingressos FROM Ingresso 
-    GROUP BY UF),
-
-Pessoas_Base AS(
-    SELECT UF, COUNT(*) AS pessoas
-    FROM (SELECT UF,CPF FROM Pedido UNION SELECT UF, CPF FROM Ingresso)
-    GROUP BY UF),
-
-Pesquisadores_Base AS (SELECT CPF_Pesq AS CPF, UF FROM Resgate_Encalhe 
-    UNION 
-    SELECT CPF_Pesq AS CPF, UF FROM Pesca 
-    UNION 
-    SELECT CPF_Pesq AS CPF, UF FROM Desova),
-
-Equipe_Itens AS (
-    SELECT CPF, UF, 'FUNCIONARIO' AS tipo,NVL(remuneracao, 0)AS custo FROM Funcionario
+CTE_Equipe_Itens AS (
+    SELECT CPF, UF, 'FUNCIONARIO' AS tipo, NVL(remuneracao, 0) AS custo FROM Funcionario
     UNION ALL
     SELECT CPF, UF, 'ARTESAO' AS tipo, NVL(subsidio, 0) AS custo FROM Artesao
     UNION ALL
-    SELECT pb.CPF, pb.UF, 'PESQUISADOR' AS tipo, NVL(pq.remuneracao, 0) AS custo FROM Pesquisadores_Base pb JOIN Pesquisador pq ON pq.CPF = pb.CPF
+    SELECT pu.CPF, pu.UF, 'PESQUISADOR' AS tipo, NVL(p.remuneracao, 0) AS custo 
+    FROM CTE_Pesquisadores_UF pu 
+    JOIN Pesquisador p ON p.CPF = pu.CPF
 ),
-
-
-Equipe_Base AS(SELECT UF,COUNT(DISTINCT CPF) AS colaboradores, 
-    COUNT(DISTINCT CASE WHEN tipo = 'FUNCIONARIO' THEN CPF END) AS func_museu, 
-    COUNT(DISTINCT CASE WHEN tipo = 'PESQUISADOR' THEN CPF END) AS pesquisadores, 
-    COUNT(DISTINCT CASE WHEN tipo = 'ARTESAO' THEN CPF END) AS artesaos,SUM(custo) AS custo_equipe
-    FROM Equipe_Itens
-    GROUP BY UF),
-
-Resgates_Area AS(
-    SELECT a.UF, a.cidade,COUNT(r.codigo_anilha) AS total_resgates, SUM(CASE WHEN r.reabilitacao = 'V' THEN 1 ELSE 0 END) AS reabilitados
-    FROM Area_de_Monitoramento a
-    LEFT JOIN Resgate_Encalhe r ON r.UF = a.UF AND r.cidade = a.cidade
-    GROUP BY a.UF, a.cidade
-),
-Resgates_Base AS(
-    SELECT UF, SUM(total_resgates) AS resgates, ROUND(AVG(total_resgates), 2) AS med_res_area, ROUND(100 * SUM(reabilitados) / NULLIF(SUM(total_resgates), 0), 2) AS tx_reab_resg
-    FROM Resgates_Area
+CTE_Equipe AS (
+    SELECT 
+        UF,
+        COUNT(DISTINCT CPF) AS total_colaboradores,
+        COUNT(DISTINCT CASE WHEN tipo = 'FUNCIONARIO' THEN CPF END) AS qtd_funcionarios,
+        COUNT(DISTINCT CASE WHEN tipo = 'PESQUISADOR' THEN CPF END) AS qtd_pesquisadores,
+        COUNT(DISTINCT CASE WHEN tipo = 'ARTESAO' THEN CPF END) AS qtd_artesaos,
+        SUM(custo) AS custo_equipe
+    FROM CTE_Equipe_Itens
     GROUP BY UF
 ),
-Desovas_Base AS(
-    SELECT d.UF, COUNT(*) AS desovas, ROUND(100*SUM(NVL(n.n_filhotes, 0))/NULLIF(SUM(NVL(n.n_ovos, 0)), 0), 2) AS tx_eclosao
+
+-- 4. MONITORAMENTO E CONSERVAÇÃO
+CTE_Resgates AS (
+    SELECT UF, COUNT(*) AS total_resgates, 
+           SUM(CASE WHEN reabilitacao = 'V' THEN 1 ELSE 0 END) AS qtd_reab_resgate
+    FROM Resgate_Encalhe GROUP BY UF
+),
+CTE_Pescas AS (
+    SELECT UF, COUNT(*) AS total_pescas, 
+           SUM(CASE WHEN classe = 'Monitorada' THEN 1 ELSE 0 END) AS pescas_monitoradas,
+           SUM(CASE WHEN reabilitacao = 'V' THEN 1 ELSE 0 END) AS qtd_reab_pesca
+    FROM Pesca GROUP BY UF
+),
+CTE_Desovas AS (
+    SELECT d.UF, COUNT(d.codigo_anilha) AS total_desovas, 
+           SUM(n.n_ovos) AS total_ovos, SUM(n.n_filhotes) AS total_filhotes
     FROM Desova d
-    JOIN Ninho n ON n.codigo_estaca = d.codigo_estaca
+    JOIN Ninho n ON d.codigo_estaca = n.codigo_estaca
     GROUP BY d.UF
 ),
-
-Pescas_Base AS(
-    SELECT UF, COUNT(*) AS pescas FROM Pesca 
-    GROUP BY UF
-),
-Tartarugas_Base AS(
-    SELECT UF, COUNT(*) AS tartarugas
+CTE_Tartarugas AS (
+    SELECT UF, COUNT(DISTINCT codigo_anilha) AS qtd_tartarugas
     FROM (
-        SELECT UF, codigo_anilha FROM Resgate_Encalhe
-        UNION
-        SELECT UF, codigo_anilha FROM Pesca
-        UNION
+        SELECT UF, codigo_anilha FROM Resgate_Encalhe UNION
+        SELECT UF, codigo_anilha FROM Pesca UNION
         SELECT UF, codigo_anilha FROM Desova
-    )
-    GROUP BY UF
+    ) GROUP BY UF
 )
-SELECT b.UF, b.cidade AS cidade_base,
-       NVL(es.lojas,0) AS lojas,NVL(es.museus, 0) AS museus, NVL(es.areas, 0) AS areas, NVL(es.lojas, 0) + NVL(es.museus, 0) + NVL(es.areas, 0) AS unidades,
-       NVL(rl.receita, 0) AS rec_lojas, NVL(rm.receita, 0) AS rec_museus, NVL(rl.receita,0)+ NVL(rm.receita, 0) AS arrec_total,
-       NVL(pb.pessoas,0) AS pessoas, NVL(eb.colaboradores,0) AS colaboradores, NVL(eb.func_museu,0) AS func_museu, NVL(eb.pesquisadores, 0) AS pesquisadores, NVL(eb.artesaos, 0) AS artesaos, NVL(eb.custo_equipe, 0) AS custo_equipe,
-       NVL(rb.resgates, 0) AS resgates, NVL(rb.med_res_area, 0) AS med_res_area, NVL(rb.tx_reab_resg, 0) AS tx_reab_resg,
-       NVL(db.desovas, 0) AS desovas, NVL(db.tx_eclosao,0) AS tx_eclosao, NVL(pes.pescas, 0) AS pescas, NVL(tb.tartarugas, 0) AS tartarugas,
-       NVL(rb.resgates, 0) + NVL(db.desovas, 0) + NVL(pes.pescas,0) AS eventos
-FROM Base b
-LEFT JOIN Estrutura_Base es ON es.UF = b.UF
-LEFT JOIN Receita_Lojas rl ON rl.UF = b.UF
-LEFT JOIN Receita_Museus rm ON rm.UF = b.UF
-LEFT JOIN Pessoas_Base pb ON pb.UF = b.UF
-LEFT JOIN Equipe_Base eb ON eb.UF = b.UF
-LEFT JOIN Resgates_Base rb ON rb.UF = b.UF
-LEFT JOIN Desovas_Base db ON db.UF = b.UF
-LEFT JOIN Pescas_Base pes ON pes.UF = b.UF
-LEFT JOIN Tartarugas_Base tb ON tb.UF = b.UF
-ORDER BY arrec_total DESC, b.UF;
+
+-- SELEÇÃO FINAL: CONSOLIDANDO TODAS AS CTEs POR ESTADO
+SELECT 
+    b.UF AS "Estado",
+
+    -- Estrutura Física
+    NVL(l.qtd_lojas, 0) AS "Lojas",
+    NVL(m.qtd_museus, 0) AS "Museus",
+    NVL(a.qtd_areas, 0) AS "Áreas de Monitoramento",
+
+    -- Financeiro e Público
+    NVL(p.total_pedidos, 0) + NVL(i.total_ingressos, 0) AS "Arrecadação Total (R$)",
+    NVL(p.qtd_clientes, 0) AS "Clientes",
+    NVL(i.qtd_visitantes, 0) AS "Visitantes",
+
+    -- Equipe Base
+    NVL(eq.qtd_funcionarios, 0) AS "Funcionários",
+    NVL(eq.qtd_pesquisadores, 0) AS "Pesquisadores",
+    NVL(eq.qtd_artesaos, 0) AS "Artesãos",
+    NVL(eq.custo_equipe, 0) AS "Custo Equipe Local (R$)",
+
+    -- Eventos Gerais
+    NVL(r.total_resgates, 0) + NVL(pe.total_pescas, 0) + NVL(d.total_desovas, 0) AS "Total de Eventos",
+    NVL(t.qtd_tartarugas, 0) AS "Tartarugas Monitoradas",
+
+    -- Detalhamento de Resgates e Reabilitação
+    NVL(r.total_resgates, 0) AS "Total Resgates",
+    ROUND(NVL(r.total_resgates, 0) / NULLIF(a.qtd_areas, 0), 2) AS "Média Resgates/Área",
+    ROUND(
+        (NVL(r.qtd_reab_resgate, 0) + NVL(pe.qtd_reab_pesca, 0)) * 100.0 / 
+        NULLIF(NVL(r.total_resgates, 0) + NVL(pe.total_pescas, 0), 0), 2
+    ) AS "Taxa de Reabilitação (%)",
+
+    -- Detalhamento de Pescas
+    NVL(pe.total_pescas, 0) AS "Total Pescas",
+    NVL(pe.pescas_monitoradas, 0) AS "Pescas Monitoradas",
+
+    -- Detalhamento de Desovas
+    NVL(d.total_desovas, 0) AS "Total Desovas",
+    ROUND(NVL(d.total_filhotes, 0) * 100.0 / NULLIF(d.total_ovos, 0), 2) AS "Taxa de Eclosão (%)"
+
+FROM (SELECT DISTINCT UF FROM Base) b
+LEFT JOIN CTE_Lojas l ON b.UF = l.UF
+LEFT JOIN CTE_Museus m ON b.UF = m.UF
+LEFT JOIN CTE_Areas a ON b.UF = a.UF
+LEFT JOIN CTE_Pedidos p ON b.UF = p.UF
+LEFT JOIN CTE_Ingressos i ON b.UF = i.UF
+LEFT JOIN CTE_Equipe eq ON b.UF = eq.UF 
+LEFT JOIN CTE_Resgates r ON b.UF = r.UF
+LEFT JOIN CTE_Pescas pe ON b.UF = pe.UF
+LEFT JOIN CTE_Desovas d ON b.UF = d.UF
+LEFT JOIN CTE_Tartarugas t ON b.UF = t.UF
+ORDER BY b.UF;
 
 
-/*Consulta 5: Tartarugas Reabilitadas com eventos Posteriores}
-Objetivo: identificar tartarugas que, após passarem por um processo 
-de reabilitação e serem registradas como vivas em um evento de resgate ou encalhe,
-continuaram participando de atividades monitoradas de pesca ou desova após o processo de reabilitação */ 
+/* CONSULTA 5: TARTARUGAS REABILITADAS COM EVENTOS POSTERIORES
+Objetivo: Identificar tartarugas que, após passarem por um processo 
+de reabilitação e serem registradas como vivas em um resgate/encalhe,
+continuaram participando de atividades monitoradas (pesca ou desova).
 
-SELECT t.nome_cientifico,
-       r.codigo_anilha,
-       COUNT(e.data_hora) AS qnt_eventos,
-       NVL(SUM(n.n_ovos),0) AS total_ovos
-FROM resgate_encalhe r
-JOIN tartaruga t
+Justificativa: Permite avaliar a eficácia dos processos de reabilitação
+e reinserção do projeto, comprovando que o animal retornou à natureza 
+saudável e ativo (comprovado por eventos subsequentes). */
+SELECT 
+    t.nome_cientifico,
+    r.codigo_anilha,
+    COUNT(e.data_hora) AS qnt_eventos,
+    NVL(SUM(n.n_ovos), 0) AS total_ovos
+FROM Resgate_Encalhe r
+JOIN Tartaruga t
     ON t.codigo_anilha = r.codigo_anilha
 LEFT JOIN (
     SELECT codigo_anilha, data_hora
-    FROM pesca
+    FROM Pesca
     UNION ALL
     SELECT codigo_anilha, data_hora
-    FROM desova
+    FROM Desova
 ) e
     ON e.codigo_anilha = r.codigo_anilha
    AND e.data_hora > r.data_hora
-LEFT JOIN desova d
+LEFT JOIN Desova d
     ON d.codigo_anilha = e.codigo_anilha
    AND d.data_hora = e.data_hora
-LEFT JOIN ninho n
+LEFT JOIN Ninho n
     ON n.codigo_estaca = d.codigo_estaca
-WHERE r.uf = 'BA'
+WHERE r.UF = 'BA'
   AND r.vivo = 'V'
   AND r.reabilitacao = 'V'
-GROUP BY t.nome_cientifico, r.codigo_anilha
-HAVING COUNT(e.data_hora) >=1 ;
+GROUP BY 
+    t.nome_cientifico, 
+    r.codigo_anilha
+HAVING COUNT(e.data_hora) > 0;
