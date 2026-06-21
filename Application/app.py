@@ -373,687 +373,428 @@ def consultar_pedidos(conn, unidade):
 
         print(f"\nErro ao consultar pedidos: {e}")
 
-# ÁREA DE MONITORAMENTO
+# funções area de monitoramento
 
-# min = minimo
-def float(mensagem, min=0.0):
-    while True:
-        entrar = input(mensagem).strip().replace(",", ".")
-
-        try:
-            valor = float(entrar)
-            if valor < min:
-                print(f"o valor deve ser maior ou igual a {min}.")
-                continue
-            return valor
-        
-        except ValueError:
-            print("Valor não permitido")
-
-
-def inteiro(mensagem,min=0):
-    while True:
-        entrar = input(mensagem).strip()
-        try:
-            valor = int(entrar)
-            if valor < min:
-                print(f"O valor deve ser maior ou igual a {min}.")
-                continue
-            return valor
-        
-        except ValueError:
-            print("Digite um numero inteiro valido.")
-
-# ler verdadeiro ou falso
-def vf(mensagem):
-
-    while True:
-        valor = input(mensagem).strip().upper()
-        if valor in ("V","F"):
-            return valor
-        print("digite V para verdadeiro ou F para falso.")
-
-
-def data_hora_evento():
-    while True:
-        entrada = input("data e hora do evento (DD/MM/AAAA HH) ou Enter para a hora atual: ").strip()
-
-        if not entrada:
-            return datetime.now().replace(minute=0, second=0, microsecond=0)
-        try:
-
-            return datetime.strptime(entrada, "%d/%m/%Y %H")
-        except ValueError:
-
-            print("o formato é inválido. tente algo como: 20/06/2026 14")
-
-#consulta pra procurar uma tartaruga pelo codigo de anilha
-def buscar_tartaruga(acesso_banco, codigo_anilha):
-    acesso_banco.execute(
-        """
-        SELECT codigo_anilha, peso, tamanho_casco, sexo, nome_cientifico
-        FROM Tartaruga
-        WHERE codigo_anilha = :codigo_anilha
-        """,
-        {"codigo_anilha": codigo_anilha},
-    )
-    return acesso_banco.fetchone()
-
-#busco todos os pesquisadores cadastrados, junto com o nome da pessoa e a formacao
-def selecionar_pesquisador(acesso_banco):
-    acesso_banco.execute(
-        """
-        SELECT pq.CPF, p.Nome, pq.formacao
-        FROM Pesquisador pq
-        JOIN Pessoa p ON p.CPF = pq.CPF
-        ORDER BY p.Nome
-        """
-    )
-    pesquisadores = acesso_banco.fetchall()
-
-    if not pesquisadores:
-        print("nenhum pesquisador cadastrado")
+# modularização
+def obter_pesquisador(cursor):
+    """Solicita, valida e verifica a existência do pesquisador no banco."""
+    cpf_pesq = input("CPF do Pesquisador Responsável: ").strip().replace(".", "").replace("-", "")
+    if not cpf_pesq.isdigit() or len(cpf_pesq) != 11:
+        print("[Erro] CPF do pesquisador deve conter exatamente 11 dígitos numéricos.")
         return None
 
-    print("\n=== PESQUISADORES ===")
-    for indice,(cpf, nome, formacao) in enumerate(pesquisadores,start=1):
-        print(f"{indice} - {nome} | CPF: {cpf} | Formação: {formacao or 'Não informada'}")
-    print("0 - Cancelar")
+    cursor.execute("SELECT 1 FROM PESQUISADOR WHERE CPF = :cpf", {"cpf": cpf_pesq})
+    if cursor.fetchone() is None:
+        print("\n[Aviso] Pesquisador não encontrado na base de dados.")
+        print("Operação Cancelada: O pesquisador precisa ser cadastrado previamente pelo gerente da base.")
+        return None
+        
+    return cpf_pesq
 
+def obter_ou_cadastrar_tartaruga(cursor, prompt="\nCódigo da anilha da tartaruga: "):
+    """Busca a tartaruga e aciona o fluxo de cadastro caso ela não exista."""
     while True:
-        try:
-            opcao = int(input("escolha o pesquisador responsável: "))
-        except ValueError:
-            print("digite um número válido")
+        codigo_anilha = input(prompt).strip().upper()
+        if not codigo_anilha:
+            print("[Erro] O código da anilha não pode ser vazio.")
             continue
-        if opcao == 0:
-            return None
-        if 1 <= opcao<= len(pesquisadores):
-            return pesquisadores[opcao - 1][0]
-        print("opção invalida")
 
-#verifico se ja existe um evento registrado para a mesma tartaruga na mesma data e hora
-def evento_ja_existe(acesso_banco, codigo_anilha, data_hora):
-    acesso_banco.execute(
-        """
-        SELECT classificacao
-        FROM Classificacoes
-        WHERE codigo_anilha = :codigo_anilha
-          AND data_hora = :data_hora
-        """,
-        {"codigo_anilha": codigo_anilha, "data_hora": data_hora},
-    )
-    return acesso_banco.fetchone()
+        cursor.execute("""
+            SELECT PESO, TAMANHO_CASCO, SEXO, NOME_CIENTIFICO 
+            FROM TARTARUGA WHERE CODIGO_ANILHA = :codigo
+        """, {"codigo": codigo_anilha})
+        
+        resultado = cursor.fetchone()
 
+        if resultado is not None:
+            print(f"\nTartaruga identificada: Espécie {resultado[3]}")
+            return codigo_anilha
 
+        print("\n[Aviso] Tartaruga não encontrada.")
+        print("1 - Digitar o código da anilha novamente")
+        print("2 - Cadastrar como uma nova tartaruga")
+        print("0 - Cancelar operação")
+        
+        opcao = input("Escolha uma opção: ").strip()
 
-'''cadastro uma nova tartaruga verificando se a anilha ja existe,
-escolhemos uma espécie e depois fazemos  um INSERT na tabela Tartaruga'''
+        if opcao == "1":
+            continue
+        elif opcao == "2":
+            print("\n=== NOVO CADASTRO DE TARTARUGA ===")
+            while True:
+                nome_especie = input("Nome Científico da Espécie: ").strip()
+                cursor.execute("SELECT 1 FROM ESPECIE WHERE NOME_CIENTIFICO = :nome", {"nome": nome_especie})
+                if cursor.fetchone() is not None: break
+                print("[Erro] Espécie não cadastrada no sistema. Digite uma espécie válida.")
 
-def cadastrar_tartaruga(conn):
-    print("\n=== CADASTRO DE TARTARUGA ===")
-    codigo_anilha = input("Código da anilha: ").strip().upper()
-
-    if not codigo_anilha:
-        print("O código da anilha é obrigatório.")
-        return
-
-    try:
-        with conn.cursor() as acesso_banco:
-            if buscar_tartaruga(acesso_banco, codigo_anilha):
-                print(" ja existe uma tartaruga com esse código de anilha.")
-                return
-
-            acesso_banco.execute(
-                """
-                SELECT nome_cientifico, nivel_de_extincao
-                FROM Especie
-                ORDER BY nome_cientifico
-                """
-            )
-
-            especies = acesso_banco.fetchall()
-
-            if not especies:
-                print("nenhuma espécie cadastrada. Cadastre uma especie antes da tartaruga")
-                return
-
-            print("\n=== ESPÉCIES ===")
-            for indice, (nome, nivel) in enumerate(especies, start=1):
-                print(f"{indice} - {nome} | Nível de extinção: {nivel or 'Não informado'}")
+            while True:
+                sexo = input("Sexo (M/F): ").strip().upper()
+                if sexo in ["M", "F"]: break
+                print("[Erro] Entrada inválida. Digite apenas M ou F.")
 
             while True:
                 try:
-                    opcao = int(input("Escolha a espécie: "))
+                    peso = float(input("Peso (kg): ").replace(",", "."))
+                    if peso > 0: break
+                    print("[Erro] O peso deve ser maior que zero.")
                 except ValueError:
-                    print("digite um numero valido")
-                    continue
-
-                if 1<= opcao <= len(especies):
-                    nome_cientifico = especies[opcao - 1][0]
-                    break
-                print("opcao nao permitida")
-
-            peso = float("Peso em kg: ", minimo=0.0)
-            tamanho_casco = float("Tamanho do casco em cm: ", minimo=0.0)
+                    print("[Erro] Digite um valor numérico válido.")
 
             while True:
-                sexo = input("Sexo (F/M): ").strip().upper()
-                if sexo in ("F", "M"):
-                    break
-                print("Digite F ou M.")
+                try:
+                    tamanho = float(input("Tamanho do Casco (cm): ").replace(",", "."))
+                    if tamanho > 0: break
+                    print("[Erro] O tamanho deve ser maior que zero.")
+                except ValueError:
+                    print("[Erro] Digite um valor numérico válido.")
 
-            acesso_banco.execute(
-                """
-                INSERT INTO Tartaruga (
-                    codigo_anilha, peso, tamanho_casco, sexo, nome_cientifico
-                )
-                VALUES (
-                    :codigo_anilha, :peso, :tamanho_casco, :sexo, :nome_cientifico
-                )
-                """,
-                {
-                    "codigo_anilha": codigo_anilha,
-                    "peso": peso,
-                    "tamanho_casco": tamanho_casco,
-                    "sexo": sexo,
-                    "nome_cientifico": nome_cientifico,
-                },
-            )
+            cursor.execute("""
+                INSERT INTO TARTARUGA (CODIGO_ANILHA, PESO, TAMANHO_CASCO, SEXO, NOME_CIENTIFICO)
+                VALUES (:codigo, :peso, :tamanho, :sexo, :especie)
+            """, {
+                "codigo": codigo_anilha, "peso": peso, "tamanho": tamanho, 
+                "sexo": sexo, "especie": nome_especie
+            })
+            print("\nTartaruga cadastrada com sucesso.")
+            return codigo_anilha
+            
+        elif opcao == "0":
+            print("\nOperação cancelada pelo usuário.")
+            return None
+        else:
+            print("[Aviso] Opção inválida. Retornando à busca do código.")
 
-        conn.commit()
-        print("tartaruga cadastrada com sucesso")
-
-    except Exception as erro:
-        conn.rollback()
-        print(f"erro ao cadastrar tartaruga: {erro}")
-
-
-#registro um evento de resgate ou encalhe de uma tartaruga
+def obter_input_vf(mensagem):
+    """Função utilitária para capturar e validar entradas booleanas (V, F ou Nulo)."""
+    while True:
+        valor = input(mensagem).strip().upper()
+        if valor in ["V", "F", ""]:
+            return valor if valor != "" else None
+        print("[Erro] Entrada inválida. Digite apenas V, F ou deixe em branco.")
 
 def registrar_resgate_encalhe(conn, unidade):
-
-    print("\n=== REGISTRAR RESGATE/ENCALHE ===")
-    codigo_anilha = input("Código da anilha: ").strip().upper()
-
     try:
-        with conn.cursor() as acesso_banco:
-            tartaruga = buscar_tartaruga(acesso_banco, codigo_anilha)
-            if tartaruga is None:
-                print("tartaruga não cadastrada")
-                return
+        print("\n=== REGISTRAR RESGATE / ENCALHE ===")
+        print(f"Área de Monitoramento: {unidade['uf']} - {unidade['cidade']}")
+        
+        with conn.cursor() as cursor:
+            cpf_pesq = obter_pesquisador(cursor)
+            if not cpf_pesq: return
 
-            cpf_pesquisador = selecionar_pesquisador(acesso_banco)
-            if cpf_pesquisador is None:
-                return
+            codigo_anilha = obter_ou_cadastrar_tartaruga(cursor)
+            if not codigo_anilha: return
 
-            data_hora = data_hora_evento()
-            evento_existente = evento_ja_existe(acesso_banco, codigo_anilha, data_hora)
-            if evento_existente:
-                print("já existe um evento para essa tartaruga nessa hora: "f"{evento_existente[0]}.")
-                return
+            motivo = input("\nMotivo do resgate/encalhe (Pressione Enter para nulo): ").strip()
+            motivo = motivo if motivo != "" else None
 
-            motivo = input("Motivo do resgate/encalhe: ").strip()
-            if not motivo:
-                print("o motivo é obrigatório.")
-                return
+            vivo = obter_input_vf("A tartaruga foi encontrada viva? (V/F ou Enter para nulo): ")
+            reabilitacao = obter_input_vf("Será encaminhada para reabilitação? (V/F ou Enter para nulo): ")
 
-            vivo = vf("A tartaruga foi encontrada viva? (V/F): ")
-
-            if vivo == "V":
+            if vivo == "V" and reabilitacao != "V":
+                print("\n[Nota do Sistema] Conforme protocolo do Projeto Tamar, tartarugas vivas resgatadas devem ir para reabilitação.")
                 reabilitacao = "V"
-                print("tartaruga viva será encaminhada para reabilitação")
-            else:
-                reabilitacao = "F"
 
-            acesso_banco.execute(
-                """
-                INSERT INTO Classificacoes (
-                    codigo_anilha, data_hora, classificacao
-                )
-                VALUES (
-                    :codigo_anilha, :data_hora, 'Resgate'
-                )
-                """,
-                {"codigo_anilha": codigo_anilha, "data_hora": data_hora},
-            )
+            cursor.execute("""
+                INSERT INTO CLASSIFICACOES (CODIGO_ANILHA, DATA_HORA, CLASSIFICACAO)
+                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), 'Resgate')
+            """, {"codigo": codigo_anilha})
 
-            acesso_banco.execute(
-                """
-                INSERT INTO Resgate_Encalhe (
-                    codigo_anilha, data_hora, UF, cidade, CPF_Pesq,
-                    motivo, vivo, reabilitacao
-                )
-                VALUES (
-                    :codigo_anilha, :data_hora, :uf, :cidade, :cpf_pesq,
-                    :motivo, :vivo, :reabilitacao
-                )
-                """,
-                {
-                    "codigo_anilha": codigo_anilha,
-                    "data_hora": data_hora,
-                    "uf": unidade["uf"],
-                    "cidade": unidade["cidade"],
-                    "cpf_pesq": cpf_pesquisador,
-                    "motivo": motivo,
-                    "vivo": vivo,
-                    "reabilitacao": reabilitacao,
-                },
-            )
+            cursor.execute("""
+                INSERT INTO RESGATE_ENCALHE (CODIGO_ANILHA, DATA_HORA, UF, CIDADE, CPF_PESQ, MOTIVO, VIVO, REABILITACAO)
+                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), :uf, :cidade, :cpf_pesq, :motivo, :vivo, :reabilitacao)
+            """, {
+                "codigo": codigo_anilha, "uf": unidade["uf"], "cidade": unidade["cidade"],
+                "cpf_pesq": cpf_pesq, "motivo": motivo, "vivo": vivo, "reabilitacao": reabilitacao
+            })
 
         conn.commit()
-        print("Resgate/encalhe registrado com sucesso.")
+        
+        print("\n====================================")
+        print("         PROJETO TAMAR")
+        print("====================================")
+        print("Resgate/Encalhe registrado com sucesso")
+        print("------------------------------------")
+        print(f"Anilha Tartaruga: {codigo_anilha}")
+        print(f"Pesquisador CPF.: {cpf_pesq}")
+        print(f"Data/Hora Base..: {datetime.now().strftime('%d/%m/%Y %H:00:00')}")
+        print("====================================")
 
-    except Exception as erro:
+    except Exception as e:
         conn.rollback()
-        print(f"Erro ao registrar resgate/encalhe: {erro}")
+        print("\nErro ao registrar o evento de resgate/encalhe.")
+        print(e)
 
-
-#registro um evento de pesca envolvendo uma tartaruga
 def registrar_pesca(conn, unidade):
-    print("\n=== REGISTRAR PESCA ===")
-    codigo_anilha = input("Código da anilha: ").strip().upper()
     try:
-        with conn.cursor() as acesso_banco:
+        print("\n=== REGISTRAR EVENTO DE PESCA ===")
+        print(f"Área de Monitoramento: {unidade['uf']} - {unidade['cidade']}")
+        
+        with conn.cursor() as cursor:
+            cpf_pesq = obter_pesquisador(cursor)
+            if not cpf_pesq: return
 
-            tartaruga = buscar_tartaruga(acesso_banco,codigo_anilha)
-
-            if tartaruga is None:
-                print("tartaruga não cadastrada")
-                return
-            cpf_pesquisador = selecionar_pesquisador(acesso_banco)
-            if cpf_pesquisador is None:
-                return
-            data_hora = data_hora_evento()
-            evento_existente = evento_ja_existe(acesso_banco,codigo_anilha,data_hora)
-            if evento_existente:
-                print("ja existe um evento para essa tartaruga nessa hora: "f"{evento_existente[0]}.")
-                return
-
-            print("\nClasse da pesca")
-            print("1 - Monitorada")
-            print("2 - Não Monitorada")
-
-
+            codigo_anilha = obter_ou_cadastrar_tartaruga(cursor)
+            if not codigo_anilha: return
 
             while True:
-                opcao = input("Escolha: ").strip()
-                if opcao == "1":
-                    classe = "Monitorada"
-                    break
-                if opcao == "2":
-                    classe = "Não Monitorada"
-                    break
-                print("Opção inválida.")
-            if classe == "Não Monitorada":
+                classe = input("\nClasse da Pesca (Monitorada / Não Monitorada ou Enter): ").strip()
+                if classe in ["Monitorada", "Não Monitorada", ""]: break
+                print("[Erro] Entrada inválida. Digite 'Monitorada', 'Não Monitorada' ou deixe vazio.")
+            classe = classe if classe != "" else None
+
+            reabilitacao = obter_input_vf("Foi encaminhada para reabilitação? (V/F ou Enter para nulo): ")
+
+            if classe == "Não Monitorada" and reabilitacao != "V":
+                print("\n[Nota do Sistema] Capturas acidentais locais exigem reabilitação preventiva.")
                 reabilitacao = "V"
-                print("Pesca não monitorada exige reabilitação.")
-            else:
-                reabilitacao = vf("Foi encaminhada para reabilitação? (V/F): ")
 
+            cursor.execute("""
+                INSERT INTO CLASSIFICACOES (CODIGO_ANILHA, DATA_HORA, CLASSIFICACAO)
+                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), 'Pesca')
+            """, {"codigo": codigo_anilha})
 
-            acesso_banco.execute(
-                """
-                INSERT INTO Classificacoes (
-                    codigo_anilha, data_hora, classificacao
-                )
-                VALUES (
-                    :codigo_anilha, :data_hora, 'Pesca'
-                )
-                """,
-                {"codigo_anilha": codigo_anilha, "data_hora": data_hora},
-            )
-
-
-            acesso_banco.execute(
-                """
-                INSERT INTO Pesca (
-                    codigo_anilha, data_hora, UF, cidade, CPF_Pesq,
-                    classe, reabilitacao
-                )
-                VALUES (
-                    :codigo_anilha, :data_hora, :uf, :cidade, :cpf_pesq,
-                    :classe, :reabilitacao
-                )
-                """,
-                {
-                    "codigo_anilha": codigo_anilha,
-                    "data_hora": data_hora,
-                    "uf": unidade["uf"],
-                    "cidade": unidade["cidade"],
-                    "cpf_pesq": cpf_pesquisador,
-                    "classe": classe,
-                    "reabilitacao": reabilitacao,
-                },
-            )
+            cursor.execute("""
+                INSERT INTO PESCA (CODIGO_ANILHA, DATA_HORA, UF, CIDADE, CPF_PESQ, CLASSE, REABILITACAO)
+                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), :uf, :cidade, :cpf_pesq, :classe, :reabilitacao)
+            """, {
+                "codigo": codigo_anilha, "uf": unidade["uf"], "cidade": unidade["cidade"],
+                "cpf_pesq": cpf_pesq, "classe": classe, "reabilitacao": reabilitacao
+            })
 
         conn.commit()
-        print("Evento de pesca registrado com sucesso")
 
-    except Exception as erro:
+        print("\n====================================")
+        print("         PROJETO TAMAR")
+        print("====================================")
+        print("Evento de Pesca registrado com sucesso")
+        print("------------------------------------")
+        print(f"Anilha Tartaruga: {codigo_anilha}")
+        print(f"Pesquisador CPF.: {cpf_pesq}")
+        print(f"Data/Hora Base..: {datetime.now().strftime('%d/%m/%Y %H:00:00')}")
+        print("====================================")
+
+    except Exception as e:
         conn.rollback()
-        print(f"Erro ao registrar pesca: {erro}")
+        print("\nErro ao registrar o evento de pesca.")
+        print(e)
 
-
-def registrar_desova(conn,unidade):
-
-    print("\n=== REGISTRAR DESOVA ===")
-
-    codigo_anilha = input("Código da anilha: ").strip().upper()
-
+def registrar_desova(conn, unidade):
     try:
-        with conn.cursor() as acesso_banco:
+        print("\n=== REGISTRAR EVENTO DE DESOVA ===")
+        print(f"Área de Monitoramento: {unidade['uf']} - {unidade['cidade']}")
+        
+        with conn.cursor() as cursor:
+            cpf_pesq = obter_pesquisador(cursor)
+            if not cpf_pesq: return
 
-            tartaruga = buscar_tartaruga(acesso_banco, codigo_anilha)
+            codigo_anilha = obter_ou_cadastrar_tartaruga(cursor, "\nCódigo da anilha da tartaruga (Fêmea): ")
+            if not codigo_anilha: return
 
-            if tartaruga is None:
-                print("taartaruga não cadastrada")
-                return
+            print("\n=== INFORMAÇÕES DO NINHO ASSOCIADO ===")
+            while True:
+                codigo_estaca = input("Código da Estaca (Obrigatório - ex: EST-102): ").strip().upper()
+                if codigo_estaca:
+                    cursor.execute("SELECT 1 FROM NINHO WHERE CODIGO_ESTACA = :estaca", {"estaca": codigo_estaca})
+                    if cursor.fetchone() is None: break
+                    print("[Erro] Este código de estaca já está cadastrado no sistema. Escolha outro.")
+                else:
+                    print("[Erro] O código da estaca não pode ser vazio.")
 
-            sexo = tartaruga[3]
-            if sexo != "F":
-                print("somente tartarugas femeas podem realizar desova")
-                return
+            lat_long = input("Coordenadas Geográficas (Latitude/Longitude ou Enter): ").strip()
+            lat_long = lat_long if lat_long != "" else None
 
-            cpf_pesquisador = selecionar_pesquisador(acesso_banco)
-            if cpf_pesquisador is None:
-                return
+            while True:
+                n_ovos_input = input("Quantidade de ovos (Inteiro ou Enter): ").strip()
+                if n_ovos_input == "":
+                    n_ovos = None
+                    break
+                if n_ovos_input.isdigit() and int(n_ovos_input) >= 0:
+                    n_ovos = int(n_ovos_input)
+                    break
+                print("[Erro] Entrada inválida. Digite um número inteiro.")
 
-            data_hora = data_hora_evento()
-            evento_existente = evento_ja_existe(acesso_banco,codigo_anilha,data_hora)
-            if evento_existente:
-                print("ja existe um evento para essa tartaruga nessa hora: "f"{evento_existente[0]}.")
-                return
+            while True:
+                n_filhotes_input = input("Quantidade de filhotes nascidos (Inteiro ou Enter): ").strip()
+                if n_filhotes_input == "":
+                    n_filhotes = None
+                    break
+                if n_filhotes_input.isdigit() and int(n_filhotes_input) >= 0:
+                    n_filhotes = int(n_filhotes_input)
+                    if n_ovos is not None and n_filhotes > n_ovos:
+                        print("[Erro] Filhotes não podem ser maiores que o total de ovos.")
+                        continue
+                    break
+                print("[Erro] Entrada inválida. Digite um número inteiro.")
 
-            codigo_estaca = input("Código da estaca: ").strip().upper()
-            if not codigo_estaca:
-                print("O código da estaca é obrigatório.")
-                return
+            cursor.execute("""
+                INSERT INTO NINHO (CODIGO_ESTACA, LAT_LONG, N_OVOS, N_FILHOTES)
+                VALUES (:codigo_estaca, :lat_long, :n_ovos, :n_filhotes)
+            """, {"codigo_estaca": codigo_estaca, "lat_long": lat_long, "n_ovos": n_ovos, "n_filhotes": n_filhotes})
 
-            acesso_banco.execute(
-                "SELECT 1 FROM Ninho WHERE codigo_estaca = :codigo_estaca",
-                {"codigo_estaca": codigo_estaca},
-            )
-            if acesso_banco.fetchone():
-                print("ja existe um ninho com esse código de estaca")
-                return
+            cursor.execute("""
+                INSERT INTO CLASSIFICACOES (CODIGO_ANILHA, DATA_HORA, CLASSIFICACAO)
+                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), 'Desova')
+            """, {"codigo": codigo_anilha})
 
-            lat_long = input("Latitude e longitude: ").strip()
-            n_ovos = inteiro("Número de ovos: ", minimo=0)
-            n_filhotes = inteiro("Número de filhotes: ", minimo=0)
-
-            if n_filhotes > n_ovos:
-                print("o número de filhotes não pode ser maior que o número de ovos")
-                return
-
-            acesso_banco.execute(
-                """
-                INSERT INTO Ninho (
-                    codigo_estaca, lat_long, n_ovos, n_filhotes
-                )
-                VALUES (
-                    :codigo_estaca, :lat_long, :n_ovos, :n_filhotes
-                )
-                """,
-                {
-                    "codigo_estaca": codigo_estaca,
-                    "lat_long": lat_long or None,
-                    "n_ovos": n_ovos,
-                    "n_filhotes": n_filhotes,
-                },
-            )
-
-            acesso_banco.execute(
-                """
-                INSERT INTO Classificacoes (
-                    codigo_anilha, data_hora, classificacao
-                )
-                VALUES (
-                    :codigo_anilha, :data_hora, 'Desova'
-                )
-                """,
-                {"codigo_anilha": codigo_anilha, "data_hora": data_hora},
-            )
-
-            acesso_banco.execute(
-                """
-                INSERT INTO Desova (
-                    codigo_anilha, data_hora, UF, cidade, CPF_Pesq, codigo_estaca
-                )
-                VALUES (
-                    :codigo_anilha, :data_hora, :uf, :cidade, :cpf_pesq,
-                    :codigo_estaca
-                )
-                """,
-                {
-                    "codigo_anilha": codigo_anilha,
-                    "data_hora": data_hora,
-                    "uf": unidade["uf"],
-                    "cidade": unidade["cidade"],
-                    "cpf_pesq": cpf_pesquisador,
-                    "codigo_estaca": codigo_estaca,
-                },
-            )
+            cursor.execute("""
+                INSERT INTO DESOVA (CODIGO_ANILHA, DATA_HORA, UF, CIDADE, CPF_PESQ, CODIGO_ESTACA)
+                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), :uf, :cidade, :cpf_pesq, :codigo_estaca)
+            """, {
+                "codigo": codigo_anilha, "uf": unidade["uf"], "cidade": unidade["cidade"],
+                "cpf_pesq": cpf_pesq, "codigo_estaca": codigo_estaca
+            })
 
         conn.commit()
-        print("desova e ninho registrados com sucesso!")
 
-    except Exception as erro:
+        print("\n====================================")
+        print("         PROJETO TAMAR")
+        print("====================================")
+        print("Evento de Desova registrado com sucesso")
+        print("------------------------------------")
+        print(f"Anilha Tartaruga: {codigo_anilha}")
+        print(f"Código Estaca...: {codigo_estaca}")
+        print(f"Data/Hora Base..: {datetime.now().strftime('%d/%m/%Y %H:00:00')}")
+        print("====================================")
+
+    except Exception as e:
         conn.rollback()
-        print(f"errro ao registrar desova: {erro}")
-
+        print("\nErro ao registrar o evento de desova.")
+        print(e)
 
 def consultar_historico_tartaruga(conn):
-
-    print("\n=== HISTÓRICO DA TARTARUGA ===")
-
-    codigo_anilha = input("Código da anilha: ").strip().upper()
-
+    """
+    Busca todas as ocorrências de uma tartaruga específica em todas as tabelas de eventos.
+    A busca é global (não depende da unidade atual) para mostrar a movimentação do animal.
+    """
     try:
-        with conn.cursor() as acesso_banco:
-
-
-            acesso_banco.execute(
-                """
-                SELECT t.codigo_anilha, t.peso, t.tamanho_casco, t.sexo,
-                       t.nome_cientifico, e.nivel_de_extincao
-                FROM Tartaruga t
-                JOIN Especie e ON e.nome_cientifico = t.nome_cientifico
-                WHERE t.codigo_anilha = :codigo_anilha
-                """,
-                {"codigo_anilha": codigo_anilha},
-            )
-            tartaruga = acesso_banco.fetchone()
-
-
-            if tartaruga is None:
-                print("tartaruga não cadastrada")
-                return
-
-            acesso_banco.execute(
-                """
-                SELECT tipo, data_hora, UF, cidade, pesquisador, detalhes
-                FROM (
-                    SELECT 'RESGATE/ENCALHE' AS tipo, r.data_hora, r.UF, r.cidade,
-                           p.Nome AS pesquisador,
-                           'Motivo: ' || NVL(r.motivo, 'Não informado') ||
-                           ' | Viva: ' || NVL(r.vivo, '-') ||
-                           ' | Reabilitação: ' || NVL(r.reabilitacao, '-') AS detalhes
-                    FROM Resgate_Encalhe r
-                    JOIN Pessoa p ON p.CPF = r.CPF_Pesq
-                    WHERE r.codigo_anilha = :codigo_anilha
-
-                    UNION ALL
-
-                    SELECT 'PESCA' AS tipo, pc.data_hora, pc.UF, pc.cidade,
-                           p.Nome AS pesquisador,
-                           'Classe: ' || NVL(pc.classe, 'Não informada') ||
-                           ' | Reabilitação: ' || NVL(pc.reabilitacao, '-') AS detalhes
-                    FROM Pesca pc
-                    JOIN Pessoa p ON p.CPF = pc.CPF_Pesq
-                    WHERE pc.codigo_anilha = :codigo_anilha
-
-                    UNION ALL
-
-                    SELECT 'DESOVA' AS tipo, d.data_hora, d.UF, d.cidade,
-                           p.Nome AS pesquisador,
-                           'Estaca: ' || d.codigo_estaca ||
-                           ' | Ovos: ' || TO_CHAR(NVL(n.n_ovos, 0)) ||
-                           ' | Filhotes: ' || TO_CHAR(NVL(n.n_filhotes, 0)) AS detalhes
-                    FROM Desova d
-                    JOIN Pessoa p ON p.CPF = d.CPF_Pesq
-                    JOIN Ninho n ON n.codigo_estaca = d.codigo_estaca
-                    WHERE d.codigo_anilha = :codigo_anilha
-                )
-                ORDER BY data_hora DESC
-                """,
-                {"codigo_anilha": codigo_anilha},
-            )
-            eventos = acesso_banco.fetchall()
-
-        print("\n====================================")
-        print(f"Anilha........: {tartaruga[0]}")
-        print(f"Espécie.......: {tartaruga[4]}")
-        print(f"Ameaça........: {tartaruga[5] or 'Não informada'}")
-        print(f"Sexo..........: {tartaruga[3]}")
-        print(f"Peso..........: {tartaruga[1] or 0} kg")
-        print(f"Casco.........: {tartaruga[2] or 0} cm")
-        print("====================================")
-
-        if not eventos:
-            print("nenhum evento registrado para essa tartaruga")
+        print("\n=== CONSULTAR HISTÓRICO DE TARTARUGA ===")
+        codigo_anilha = input("Digite o Código da Anilha: ").strip().upper()
+        
+        if not codigo_anilha:
+            print("[Erro] O código da anilha não pode ser vazio.")
             return
 
-        for tipo, data_hora, uf, cidade, pesquisador, detalhes in eventos:
-            print(f"\n{tipo} - {data_hora.strftime('%d/%m/%Y %H:%M')}")
-            print(f"Local.........: {uf} - {cidade}")
-            print(f"Pesquisador...: {pesquisador}")
-            print(f"Detalhes......: {detalhes}")
+        with conn.cursor() as cursor:
+            # 1. Verifica se a tartaruga existe e pega a espécie
+            cursor.execute("""
+                SELECT NOME_CIENTIFICO, SEXO 
+                FROM TARTARUGA 
+                WHERE CODIGO_ANILHA = :codigo
+            """, {"codigo": codigo_anilha})
+            
+            tartaruga = cursor.fetchone()
+            
+            if tartaruga is None:
+                print("\n[Aviso] Tartaruga não encontrada na base de dados.")
+                return
+                
+            especie, sexo = tartaruga[0], tartaruga[1]
+            
+            # 2. Busca o histórico unificado e ordenado cronologicamente
+            cursor.execute("""
+                SELECT TO_CHAR(DATA_HORA, 'DD/MM/YYYY HH24:MI') AS DATA_FORMATADA, 
+                       TIPO_EVENTO, 
+                       LOCALIDADE
+                FROM (
+                    SELECT DATA_HORA, 'Resgate/Encalhe' AS TIPO_EVENTO, CIDADE || ' - ' || UF AS LOCALIDADE 
+                    FROM RESGATE_ENCALHE WHERE CODIGO_ANILHA = :codigo
+                    UNION ALL
+                    SELECT DATA_HORA, 'Pesca Acidental' AS TIPO_EVENTO, CIDADE || ' - ' || UF AS LOCALIDADE 
+                    FROM PESCA WHERE CODIGO_ANILHA = :codigo
+                    UNION ALL
+                    SELECT DATA_HORA, 'Desova Registrada' AS TIPO_EVENTO, CIDADE || ' - ' || UF AS LOCALIDADE 
+                    FROM DESOVA WHERE CODIGO_ANILHA = :codigo
+                )
+                ORDER BY DATA_HORA ASC
+            """, {"codigo": codigo_anilha})
+            
+            eventos = cursor.fetchall()
+            
+        # 3. Exibição dos resultados formatados
+        print("\n=======================================================")
+        print(f" HISTÓRICO: {codigo_anilha} | {especie} ({sexo})")
+        print("=======================================================")
+        
+        if not eventos:
+            print("Nenhum evento de campo registrado para este animal.")
+        else:
+            print(f"{'DATA / HORA':<18} | {'TIPO DE EVENTO':<20} | {'LOCALIDADE'}")
+            print("-" * 55)
+            for ev in eventos:
+                print(f"{ev[0]:<18} | {ev[1]:<20} | {ev[2]}")
+        print("=======================================================")
 
-    except Exception as erro:
-        print(f"Erro ao consultar histórico: {erro}")
-
+    except Exception as e:
+        print("\n[Erro] Falha ao consultar o histórico.")
+        print(e)
 
 def consultar_estatisticas_area(conn, unidade):
+    """
+    Gera um relatório sintético da área de monitoramento em que o usuário está logado no momento.
+    """
     try:
-        with conn.cursor() as acesso_banco:
-            parametros = {"uf": unidade["uf"], "cidade": unidade["cidade"]}
+        print(f"\n=== ESTATÍSTICAS DA BASE: {unidade['cidade']} - {unidade['uf']} ===")
+        
+        with conn.cursor() as cursor:
+            # Conta os Resgates
+            cursor.execute("""
+                SELECT COUNT(*), SUM(CASE WHEN REABILITACAO = 'V' THEN 1 ELSE 0 END)
+                FROM RESGATE_ENCALHE 
+                WHERE UF = :uf AND CIDADE = :cidade
+            """, {"uf": unidade["uf"], "cidade": unidade["cidade"]})
+            res_resgates = cursor.fetchone()
+            total_resgates = res_resgates[0] or 0
+            reab_resgates = res_resgates[1] or 0
 
-            acesso_banco.execute(
-                """
-                SELECT COUNT(*),
-                       SUM(CASE WHEN vivo = 'V' THEN 1 ELSE 0 END),
-                       SUM(CASE WHEN reabilitacao = 'V' THEN 1 ELSE 0 END)
-                FROM Resgate_Encalhe
-                WHERE UF = :uf AND cidade = :cidade
-                """,
-                parametros,
-            )
-            resgates, vivos, reabilitados_resgate = acesso_banco.fetchone()
+            # Conta as Pescas
+            cursor.execute("""
+                SELECT COUNT(*), SUM(CASE WHEN CLASSE = 'Monitorada' THEN 1 ELSE 0 END)
+                FROM PESCA 
+                WHERE UF = :uf AND CIDADE = :cidade
+            """, {"uf": unidade["uf"], "cidade": unidade["cidade"]})
+            res_pescas = cursor.fetchone()
+            total_pescas = res_pescas[0] or 0
+            pescas_monitoradas = res_pescas[1] or 0
 
-            acesso_banco.execute(
-                """
-                SELECT COUNT(*),
-                       SUM(CASE WHEN classe = 'Monitorada' THEN 1 ELSE 0 END),
-                       SUM(CASE WHEN classe = 'Não Monitorada' THEN 1 ELSE 0 END),
-                       SUM(CASE WHEN reabilitacao = 'V' THEN 1 ELSE 0 END)
-                FROM Pesca
-                WHERE UF = :uf AND cidade = :cidade
-                """,
-                parametros,
-            )
-            pescas, monitoradas, nao_monitoradas, reabilitados_pesca = acesso_banco.fetchone()
+            # Conta as Desovas (e faz um join rápido com Ninho para pegar estatísticas biológicas)
+            cursor.execute("""
+                SELECT COUNT(D.CODIGO_ANILHA), SUM(N.N_OVOS), SUM(N.N_FILHOTES)
+                FROM DESOVA D
+                JOIN NINHO N ON D.CODIGO_ESTACA = N.CODIGO_ESTACA
+                WHERE D.UF = :uf AND D.CIDADE = :cidade
+            """, {"uf": unidade["uf"], "cidade": unidade["cidade"]})
+            res_desovas = cursor.fetchone()
+            total_desovas = res_desovas[0] or 0
+            total_ovos = res_desovas[1] or 0
+            total_filhotes = res_desovas[2] or 0
 
-            acesso_banco.execute(
-                """
-                SELECT COUNT(*), NVL(SUM(n.n_ovos), 0), NVL(SUM(n.n_filhotes), 0)
-                FROM Desova d
-                JOIN Ninho n ON n.codigo_estaca = d.codigo_estaca
-                WHERE d.UF = :uf AND d.cidade = :cidade
-                """,
-                parametros,
-            )
-            desovas, ovos, filhotes = acesso_banco.fetchone()
+        # Exibição do Dashboard no Terminal
+        print("\n--- RESGATES E ENCALHES ---")
+        print(f"Total de Ocorrências : {total_resgates}")
+        print(f"Animais Reabilitados : {reab_resgates}")
+        
+        print("\n--- ATIVIDADE DE PESCA ---")
+        print(f"Total de Ocorrências : {total_pescas}")
+        print(f"Pescas Monitoradas   : {pescas_monitoradas}")
+        
+        print("\n--- MONITORAMENTO DE DESOVAS ---")
+        print(f"Total de Ninhos      : {total_desovas}")
+        print(f"Ovos Contabilizados  : {total_ovos}")
+        print(f"Filhotes Nascidos    : {total_filhotes}")
+        
+        if total_ovos > 0:
+            taxa = (total_filhotes / total_ovos) * 100
+            print(f"Taxa de Eclosão Média: {taxa:.2f}%")
 
-            acesso_banco.execute(
-                """
-                SELECT COUNT(*)
-                FROM (
-                    SELECT codigo_anilha FROM Resgate_Encalhe
-                    WHERE UF = :uf AND cidade = :cidade
-                    UNION
-                    SELECT codigo_anilha FROM Pesca
-                    WHERE UF = :uf AND cidade = :cidade
-                    UNION
-                    SELECT codigo_anilha FROM Desova
-                    WHERE UF = :uf AND cidade = :cidade
-                )
-                """,
-                parametros,
-            )
-            tartarugas = acesso_banco.fetchone()[0]
+        print("\n=======================================================")
+        print(f"VOLUME TOTAL DE EVENTOS NA ÁREA: {total_resgates + total_pescas + total_desovas}")
+        print("=======================================================")
 
-            acesso_banco.execute(
-                """
-                SELECT COUNT(*)
-                FROM (
-                    SELECT CPF_Pesq FROM Resgate_Encalhe
-                    WHERE UF = :uf AND cidade = :cidade
-                    UNION
-                    SELECT CPF_Pesq FROM Pesca
-                    WHERE UF = :uf AND cidade = :cidade
-                    UNION
-                    SELECT CPF_Pesq FROM Desova
-                    WHERE UF = :uf AND cidade = :cidade
-                )
-                """,
-                parametros,
-            )
-            pesquisadores = acesso_banco.fetchone()[0]
+    except Exception as e:
+        print("\n[Erro] Falha ao extrair estatísticas da área.")
+        print(e)
 
-        resgates = resgates or 0
-        vivos = vivos or 0
-        reabilitados_resgate = reabilitados_resgate or 0
-        pescas = pescas or 0
-        monitoradas = monitoradas or 0
-        nao_monitoradas = nao_monitoradas or 0
-        reabilitados_pesca = reabilitados_pesca or 0
-        desovas = desovas or 0
-        ovos = ovos or 0
-        filhotes = filhotes or 0
-
-        taxa_reabilitacao = (100 * reabilitados_resgate / resgates if resgates else 0)
-        taxa_eclosao = 100 * filhotes / ovos if ovos else 0
-        total_eventos = resgates + pescas + desovas
-
-        print("\n====================================")
-        print(" ESTATÍSTICAS DA ÁREA")
-        print("====================================")
-        print(f"Área.................: {unidade['uf']} - {unidade['cidade']}")
-        print(f"Total de eventos.....: {total_eventos}")
-        print(f"Tartarugas distintas.: {tartarugas}")
-        print(f"Pesquisadores........: {pesquisadores}")
-        print("------------------------------------")
-        print(f"Resgates..............: {resgates}")
-        print(f"Encontradas vivas.....: {vivos}")
-        print(f"Reabilitadas..........: {reabilitados_resgate}")
-        print(f"Taxa de reabilitação..: {taxa_reabilitacao:.2f}%")
-        print("------------------------------------")
-        print(f"Pescas................: {pescas}")
-        print(f"Monitoradas...........: {monitoradas}")
-        print(f"Não monitoradas.......: {nao_monitoradas}")
-        print(f"Reabilitações pesca...: {reabilitados_pesca}")
-        print("------------------------------------")
-        print(f"Desovas...............: {desovas}")
-        print(f"Ovos..................: {ovos}")
-        print(f"Filhotes..............: {filhotes}")
-        print(f"Taxa de eclosão.......: {taxa_eclosao:.2f}%")
-        print("====================================")
-
-    except Exception as erro:
-        print(f"erro ao consultar estatísticas: {erro}")
-
-# === funções museu ===
+# funções museu 
 # Função para vender um ingresso
 def vender_ingresso(conn, unidade):
     try:
@@ -1372,27 +1113,24 @@ def menu_monitoramento(conn, unidade):
         print(f"UF: {unidade['uf']}")
         print(f"Cidade: {unidade['cidade']}")
         print("------------------------------------")
-        print("1 - Cadastrar tartaruga")
-        print("2 - Registrar resgate/encalhe")
-        print("3 - Registrar pesca")
-        print("4 - Registrar desova")
-        print("5 - Consultar histórico de uma tartaruga")
-        print("6 - Consultar estatísticas da área")
+        print("1 - Registrar resgate/encalhe")
+        print("2 - Registrar pesca")
+        print("3 - Registrar desova")
+        print("4 - Consultar histórico de uma tartaruga")
+        print("5 - Consultar estatísticas da área")
         print("0 - Voltar")
 
         opcao = input("\nEscolha uma opção: ").strip()
 
         if opcao == "1":
-            cadastrar_tartaruga(conn)
-        elif opcao == "2":
             registrar_resgate_encalhe(conn, unidade)
-        elif opcao == "3":
+        elif opcao == "2":
             registrar_pesca(conn, unidade)
-        elif opcao == "4":
+        elif opcao == "3":
             registrar_desova(conn, unidade)
-        elif opcao == "5":
+        elif opcao == "4":
             consultar_historico_tartaruga(conn)
-        elif opcao == "6":
+        elif opcao == "5":
             consultar_estatisticas_area(conn, unidade)
         elif opcao == "0":
             break
