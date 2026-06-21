@@ -1,19 +1,15 @@
 from database import conectar
 from datetime import datetime
 
-# UTILIDADES
-
+# UTILIDADES GERAIS
 def selecionar_unidade(conn, tabela, nome_unidade):
-
     try:
         with conn.cursor() as cursor:
-
             cursor.execute(f"""
                 SELECT UF, CIDADE
                 FROM {tabela}
                 ORDER BY UF, CIDADE
             """)
-
             unidades = cursor.fetchall()
 
             if not unidades:
@@ -21,10 +17,8 @@ def selecionar_unidade(conn, tabela, nome_unidade):
                 return None
 
             print(f"\n=== {nome_unidade.upper()} ===")
-
             for i, (uf, cidade) in enumerate(unidades, start=1):
                 print(f"{i} - {uf} - {cidade}")
-
             print("0 - Voltar")
 
             try:
@@ -41,7 +35,6 @@ def selecionar_unidade(conn, tabela, nome_unidade):
                 return None
 
             uf, cidade = unidades[opcao - 1]
-
             return {
                 "uf": uf,
                 "cidade": cidade
@@ -51,102 +44,78 @@ def selecionar_unidade(conn, tabela, nome_unidade):
         print(f"Erro: {e}")
         return None
 
-# funções lojas
+def obter_ou_cadastrar_pessoa(cursor, cpf):
+    """Módulo reaproveitável para Lojas e Museus: Busca a pessoa pelo CPF ou aciona o cadastro."""
+    cursor.execute("""
+        SELECT NOME, PRIORIDADE_LEI
+        FROM PESSOA
+        WHERE CPF = :cpf
+    """, {"cpf": cpf})
+
+    resultado = cursor.fetchone()
+
+    if resultado is not None:
+        return resultado[0], resultado[1]  # Retorna: nome, prioridade
+
+    print("\nCliente/Visitante não encontrado.")
+    print("=== NOVO CADASTRO ===")
+    nome = input("Nome: ").strip()
+
+    while True:
+        data_nasc_str = input("Data de nascimento (DD/MM/YYYY): ").strip()
+        try:
+            data_nasc_obj = datetime.strptime(data_nasc_str, "%d/%m/%Y")
+            if data_nasc_obj > datetime.now():
+                print("[Erro] A data de nascimento não pode ser no futuro.")
+                continue
+            break
+        except ValueError:
+            print("[Erro] Formato inválido. Use DD/MM/YYYY.")
+
+    while True:
+        print("\nPrioridade por lei")
+        print("1 - Nenhuma")
+        print("2 - Estudante")
+        print("3 - Idoso")
+        print("4 - Gestante")
+
+        opc = input("Opção: ").strip()
+        if opc in ["1", "2", "3", "4"]:
+            break
+        print("Opção inválida.")
+
+    prioridade = None
+    if opc == "2": prioridade = "Estudante"
+    elif opc == "3": prioridade = "Idoso"
+    elif opc == "4": prioridade = "Gestante"
+
+    cursor.execute("""
+        INSERT INTO PESSOA (CPF, NOME, DATA_NASCIM, FUNCAO, PRIORIDADE_LEI)
+        VALUES (:cpf, :nome, TO_DATE(:data_nasc,'DD/MM/YYYY'), NULL, :prioridade)
+    """, {
+        "cpf": cpf,
+        "nome": nome,
+        "data_nasc": data_nasc_str,
+        "prioridade": prioridade
+    })
+
+    print("\nCadastro realizado com sucesso.")
+    return nome, prioridade
+
+
+# FUNÇÕES LOJA
 def registrar_pedido(conn, unidade):
-
     try:
-
         cpf = input("\nCPF do cliente: ").strip()
-
         if not cpf.isdigit():
             print("CPF deve conter apenas números.")
             return
 
         with conn.cursor() as cursor:
+            # Substituído pelo módulo reutilizável
+            nome, prioridade = obter_ou_cadastrar_pessoa(cursor, cpf)
 
-            # Verifica se a pessoa existe
-
-            cursor.execute("""
-                SELECT NOME
-                FROM PESSOA
-                WHERE CPF = :cpf
-            """, {"cpf": cpf})
-
-            resultado = cursor.fetchone()
-
-            if resultado is None:
-
-                print("\nCliente não encontrado.")
-                print("=== NOVO CADASTRO ===")
-
-                nome = input("Nome: ").strip()
-
-                data_nasc = input(
-                    "Data de nascimento (DD/MM/YYYY): "
-                ).strip()
-
-                while True:
-
-                    print("\nPrioridade por lei")
-                    print("1 - Nenhuma")
-                    print("2 - Estudante")
-                    print("3 - Idoso")
-                    print("4 - Gestante")
-
-                    opc = input("Opção: ").strip()
-
-                    if opc in ["1", "2", "3", "4"]:
-                        break
-
-                    print("Opção inválida.")
-
-                prioridade = None
-
-                if opc == "2":
-                    prioridade = "Estudante"
-                elif opc == "3":
-                    prioridade = "Idoso"
-                elif opc == "4":
-                    prioridade = "Gestante"
-
-                cursor.execute("""
-                    INSERT INTO PESSOA (
-                        CPF,
-                        NOME,
-                        DATA_NASCIM,
-                        FUNCAO,
-                        PRIORIDADE_LEI
-                    )
-                    VALUES (
-                        :cpf,
-                        :nome,
-                        TO_DATE(:data_nasc,'DD/MM/YYYY'),
-                        NULL,
-                        :prioridade
-                    )
-                """, {
-                    "cpf": cpf,
-                    "nome": nome,
-                    "data_nasc": data_nasc,
-                    "prioridade": prioridade
-                })
-
-                print("\nCliente cadastrado com sucesso.")
-
-            else:
-
-                nome = resultado[0]
-
-                cursor.execute("""
-                    SELECT PRIORIDADE_LEI
-                    FROM PESSOA
-                    WHERE CPF = :cpf
-                """, {"cpf": cpf})
-
-                prioridade = cursor.fetchone()[0]
-
-            # Verifica se já existe relacionamento VENDE
-
+            # Verifica se já existe relacionamento VENDE_PARA
             cursor.execute("""
                 SELECT 1
                 FROM VENDE_PARA
@@ -160,18 +129,9 @@ def registrar_pedido(conn, unidade):
             })
 
             if cursor.fetchone() is None:
-
                 cursor.execute("""
-                    INSERT INTO VENDE_PARA (
-                        CPF,
-                        UF,
-                        CIDADE
-                    )
-                    VALUES (
-                        :cpf,
-                        :uf,
-                        :cidade
-                    )
+                    INSERT INTO VENDE_PARA (CPF, UF, CIDADE)
+                    VALUES (:cpf, :uf, :cidade)
                 """, {
                     "cpf": cpf,
                     "uf": unidade["uf"],
@@ -179,42 +139,18 @@ def registrar_pedido(conn, unidade):
                 })
 
             while True:
-
                 try:
-
-                    valor = float(
-                        input(
-                            "Valor do pedido: R$ "
-                        ).replace(",", ".")
-                    )
-
+                    valor = float(input("Valor do pedido: R$ ").replace(",", "."))
                     if valor <= 0:
-                        print(
-                            "O valor deve ser maior que zero."
-                        )
+                        print("O valor deve ser maior que zero.")
                         continue
-
                     break
-
                 except ValueError:
-
                     print("Valor inválido.")
 
             cursor.execute("""
-                INSERT INTO PEDIDO (
-                    CPF,
-                    UF,
-                    CIDADE,
-                    DATA_HORA,
-                    VALOR
-                )
-                VALUES (
-                    :cpf,
-                    :uf,
-                    :cidade,
-                    SYSDATE,
-                    :valor
-                )
+                INSERT INTO PEDIDO (CPF, UF, CIDADE, DATA_HORA, VALOR)
+                VALUES (:cpf, :uf, :cidade, SYSDATE, :valor)
             """, {
                 "cpf": cpf,
                 "uf": unidade["uf"],
@@ -223,7 +159,6 @@ def registrar_pedido(conn, unidade):
             })
 
         conn.commit()
-
         momento = datetime.now()
 
         print("\n====================================")
@@ -233,39 +168,20 @@ def registrar_pedido(conn, unidade):
         print("------------------------------------")
         print(f"Cliente......: {nome}")
         print(f"CPF..........: {cpf}")
-
-        if prioridade:
-            print(f"Prioridade...: {prioridade}")
-        else:
-            print("Prioridade...: Nenhuma")
-
-        print(
-            f"Loja.........: "
-            f"{unidade['uf']} - {unidade['cidade']}"
-        )
-
+        print(f"Prioridade...: {prioridade if prioridade else 'Nenhuma'}")
+        print(f"Loja.........: {unidade['uf']} - {unidade['cidade']}")
         print(f"Valor........: R$ {valor:.2f}")
-
-        print(
-            "Data/Hora....: "
-            f"{momento.strftime('%d/%m/%Y %H:%M:%S')}"
-        )
-
+        print(f"Data/Hora....: {momento.strftime('%d/%m/%Y %H:%M:%S')}")
         print("====================================")
 
     except Exception as e:
-
         conn.rollback()
-
         print("\nErro ao registrar pedido.")
         print(e)
 
 def consultar_faturamento_loja(conn, unidade):
-
     try:
-
         with conn.cursor() as cursor:
-
             cursor.execute("""
                 SELECT
                     COUNT(*) AS quantidade_pedidos,
@@ -276,22 +192,15 @@ def consultar_faturamento_loja(conn, unidade):
                 FROM PEDIDO
                 WHERE UF = :uf
                   AND CIDADE = :cidade
-                  AND EXTRACT(MONTH FROM DATA_HORA) =
-                      EXTRACT(MONTH FROM SYSDATE)
-                  AND EXTRACT(YEAR FROM DATA_HORA) =
-                      EXTRACT(YEAR FROM SYSDATE)
+                  AND EXTRACT(MONTH FROM DATA_HORA) = EXTRACT(MONTH FROM SYSDATE)
+                  AND EXTRACT(YEAR FROM DATA_HORA) = EXTRACT(YEAR FROM SYSDATE)
             """, {
                 "uf": unidade["uf"],
                 "cidade": unidade["cidade"]
             })
 
             resultado = cursor.fetchone()
-
-            qtd_pedidos = resultado[0]
-            faturamento = resultado[1]
-            ticket_medio = resultado[2]
-            menor_pedido = resultado[3]
-            maior_pedido = resultado[4]
+            qtd_pedidos, faturamento, ticket_medio, menor_pedido, maior_pedido = resultado
 
             print("\n====================================")
             print(" FATURAMENTO MENSAL")
@@ -306,15 +215,11 @@ def consultar_faturamento_loja(conn, unidade):
             print("====================================")
 
     except Exception as e:
-
         print(f"\nErro ao consultar faturamento: {e}")
 
 def consultar_pedidos(conn, unidade):
-
     try:
-
         with conn.cursor() as cursor:
-
             cursor.execute("""
                 SELECT
                     CPF,
@@ -323,10 +228,8 @@ def consultar_pedidos(conn, unidade):
                 FROM PEDIDO
                 WHERE UF = :uf
                   AND CIDADE = :cidade
-                  AND EXTRACT(MONTH FROM DATA_HORA) =
-                      EXTRACT(MONTH FROM SYSDATE)
-                  AND EXTRACT(YEAR FROM DATA_HORA) =
-                      EXTRACT(YEAR FROM SYSDATE)
+                  AND EXTRACT(MONTH FROM DATA_HORA) = EXTRACT(MONTH FROM SYSDATE)
+                  AND EXTRACT(YEAR FROM DATA_HORA) = EXTRACT(YEAR FROM SYSDATE)
                 ORDER BY DATA_HORA DESC
             """, {
                 "uf": unidade["uf"],
@@ -346,53 +249,36 @@ def consultar_pedidos(conn, unidade):
                 return
 
             total = 0
-
-            print(
-                f"{'CPF':<15} "
-                f"{'DATA':<20} "
-                f"{'VALOR':>10}"
-            )
-
+            print(f"{'CPF':<15} {'DATA':<20} {'VALOR':>10}")
             print("-" * 50)
 
             for cpf, data_hora, valor in pedidos:
-
                 total += valor
-
-                print(
-                    f"{cpf:<15} "
-                    f"{data_hora:<20} "
-                    f"R$ {valor:>7.2f}"
-                )
+                print(f"{cpf:<15} {data_hora:<20} R$ {valor:>7.2f}")
 
             print("-" * 50)
             print(f"Total de pedidos: {len(pedidos)}")
             print(f"Valor movimentado: R$ {total:.2f}")
 
     except Exception as e:
-
         print(f"\nErro ao consultar pedidos: {e}")
 
-# funções area de monitoramento
 
-# modularização
-
+# FUNÇÕES AREA DE MONITORAMENTO & MODULARIZAÇÃO
 def obter_data_hora_evento():
-    """Captura a data e hora do usuário forçando a precisão de hora inteira."""
+    """Captura a data e hora verificando e impedindo que seja no futuro."""
     while True:
         dt_str = input("\nData e Hora do evento (DD/MM/AAAA HH): ").strip()
         try:
-            # O formato '%d/%m/%Y %H' obriga o usuário a digitar apenas até a hora
             dt_obj = datetime.strptime(dt_str, "%d/%m/%Y %H")
-            
-            # Converte de volta para string preenchendo minutos e segundos com zeros
-            # Formato compatível com o TO_DATE do Oracle
+            if dt_obj > datetime.now():
+                print("[Erro] A data e hora do evento não podem estar no futuro.")
+                continue
             return dt_obj.strftime("%d/%m/%Y %H:00:00")
         except ValueError:
-            print("[Erro] Formato inválido. Digite no padrão DD/MM/AAAA HH (Exemplo: 21/06/2026 14).")
+            print("[Erro] Formato inválido. Digite no padrão DD/MM/AAAA HH (Ex: 21/06/2026 14).")
 
 def verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
-    """Verifica na tabela Classificacoes se a tartaruga já tem evento nesta exata hora."""
     cursor.execute("""
         SELECT CLASSIFICACAO 
         FROM CLASSIFICACOES 
@@ -402,13 +288,11 @@ def verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
     
     resultado = cursor.fetchone()
     if resultado is not None:
-        tipo_evento = resultado[0]
-        print(f"\n[Erro de Unicidade] A tartaruga {codigo_anilha} já possui um evento de '{tipo_evento}' registrado exatamente nesta data e hora.")
-        return True # Existe conflito temporal
-    return False # Caminho livre
+        print(f"\n[Erro de Unicidade] A tartaruga {codigo_anilha} já possui um evento de '{resultado[0]}' registrado nesta exata hora.")
+        return True
+    return False
 
 def obter_pesquisador(cursor):
-    """Solicita, valida e verifica a existência do pesquisador no banco."""
     cpf_pesq = input("CPF do Pesquisador Responsável: ").strip().replace(".", "").replace("-", "")
     if not cpf_pesq.isdigit() or len(cpf_pesq) != 11:
         print("[Erro] CPF do pesquisador deve conter exatamente 11 dígitos numéricos.")
@@ -423,7 +307,6 @@ def obter_pesquisador(cursor):
     return cpf_pesq
 
 def obter_ou_cadastrar_tartaruga(cursor, prompt="\nCódigo da anilha da tartaruga: "):
-    """Busca a tartaruga e aciona o fluxo de cadastro caso ela não exista."""
     while True:
         codigo_anilha = input(prompt).strip().upper()
         if not codigo_anilha:
@@ -452,11 +335,27 @@ def obter_ou_cadastrar_tartaruga(cursor, prompt="\nCódigo da anilha da tartarug
             continue
         elif opcao == "2":
             print("\n=== NOVO CADASTRO DE TARTARUGA ===")
+            
+            # Nova Lógica: Selecionar a espécie do banco de dados em vez de digitar
+            cursor.execute("SELECT NOME_CIENTIFICO FROM ESPECIE ORDER BY NOME_CIENTIFICO")
+            especies = cursor.fetchall()
+            
+            if not especies:
+                print("[Erro] Não há espécies cadastradas no sistema. Cadastre uma Espécie primeiro.")
+                return None
+                
             while True:
-                nome_especie = input("Nome Científico da Espécie: ").strip()
-                cursor.execute("SELECT 1 FROM ESPECIE WHERE NOME_CIENTIFICO = :nome", {"nome": nome_especie})
-                if cursor.fetchone() is not None: break
-                print("[Erro] Espécie não cadastrada no sistema. Digite uma espécie válida.")
+                print("\nEspécies catalogadas no sistema:")
+                for i, (esp,) in enumerate(especies, start=1):
+                    print(f"{i} - {esp}")
+                try:
+                    opc_esp = int(input("Escolha o número correspondente à espécie: "))
+                    if 1 <= opc_esp <= len(especies):
+                        nome_especie = especies[opc_esp - 1][0]
+                        break
+                    print("[Erro] Opção inválida.")
+                except ValueError:
+                    print("[Erro] Digite um número válido.")
 
             while True:
                 sexo = input("Sexo (M/F): ").strip().upper()
@@ -496,7 +395,6 @@ def obter_ou_cadastrar_tartaruga(cursor, prompt="\nCódigo da anilha da tartarug
             print("[Aviso] Opção inválida. Retornando à busca do código.")
 
 def obter_input_vf(mensagem):
-    """Função utilitária para capturar e validar entradas booleanas (V, F ou Nulo)."""
     while True:
         valor = input(mensagem).strip().upper()
         if valor in ["V", "F", ""]:
@@ -515,10 +413,9 @@ def registrar_resgate_encalhe(conn, unidade):
             codigo_anilha = obter_ou_cadastrar_tartaruga(cursor)
             if not codigo_anilha: return
 
-            # Nova lógica de Data e Hora com verificação de conflito
             data_hora_str = obter_data_hora_evento()
             if verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
-                return # Interrompe a função se a tartaruga já tiver evento nesta hora
+                return
 
             motivo = input("\nMotivo do resgate/encalhe (Enter para nulo): ").strip()
             motivo = motivo if motivo != "" else None
@@ -530,7 +427,6 @@ def registrar_resgate_encalhe(conn, unidade):
                 print("\n[Nota do Sistema] Conforme protocolo do Projeto Tamar, tartarugas vivas resgatadas devem ir para reabilitação.")
                 reabilitacao = "V"
 
-            # Inserção atualizada para usar a data fornecida pelo usuário
             cursor.execute("""
                 INSERT INTO CLASSIFICACOES (CODIGO_ANILHA, DATA_HORA, CLASSIFICACAO)
                 VALUES (:codigo, TO_DATE(:dt, 'DD/MM/YYYY HH24:MI:SS'), 'Resgate')
@@ -574,16 +470,28 @@ def registrar_pesca(conn, unidade):
             codigo_anilha = obter_ou_cadastrar_tartaruga(cursor)
             if not codigo_anilha: return
 
-            # Nova lógica de Data e Hora com verificação de conflito
             data_hora_str = obter_data_hora_evento()
             if verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
                 return
 
+            # Nova Lógica: Selecionar o tipo de classe por menu
             while True:
-                classe = input("\nClasse da Pesca (Monitorada / Não Monitorada ou Enter): ").strip()
-                if classe in ["Monitorada", "Não Monitorada", ""]: break
-                print("[Erro] Entrada inválida. Digite 'Monitorada', 'Não Monitorada' ou deixe vazio.")
-            classe = classe if classe != "" else None
+                print("\nClasse da Pesca:")
+                print("1 - Monitorada")
+                print("2 - Não Monitorada")
+                print("0 - Nulo (Pular)")
+                opc_classe = input("Escolha uma opção: ").strip()
+                
+                if opc_classe == "1":
+                    classe = "Monitorada"
+                    break
+                elif opc_classe == "2":
+                    classe = "Não Monitorada"
+                    break
+                elif opc_classe == "0":
+                    classe = None
+                    break
+                print("[Erro] Opção inválida.")
 
             reabilitacao = obter_input_vf("Foi encaminhada para reabilitação? (V/F ou Enter): ")
 
@@ -634,7 +542,6 @@ def registrar_desova(conn, unidade):
             codigo_anilha = obter_ou_cadastrar_tartaruga(cursor, "\nCódigo da anilha da tartaruga (Fêmea): ")
             if not codigo_anilha: return
 
-            # Nova lógica de Data e Hora com verificação de conflito
             data_hora_str = obter_data_hora_evento()
             if verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
                 return
@@ -711,10 +618,6 @@ def registrar_desova(conn, unidade):
         print(e)
 
 def consultar_historico_tartaruga(conn):
-    """
-    Busca todas as ocorrências de uma tartaruga específica em todas as tabelas de eventos.
-    A busca é global (não depende da unidade atual) para mostrar a movimentação do animal.
-    """
     try:
         print("\n=== CONSULTAR HISTÓRICO DE TARTARUGA ===")
         codigo_anilha = input("Digite o Código da Anilha: ").strip().upper()
@@ -724,7 +627,6 @@ def consultar_historico_tartaruga(conn):
             return
 
         with conn.cursor() as cursor:
-            # 1. Verifica se a tartaruga existe e pega a espécie
             cursor.execute("""
                 SELECT NOME_CIENTIFICO, SEXO 
                 FROM TARTARUGA 
@@ -739,7 +641,6 @@ def consultar_historico_tartaruga(conn):
                 
             especie, sexo = tartaruga[0], tartaruga[1]
             
-            # 2. Busca o histórico unificado e ordenado cronologicamente
             cursor.execute("""
                 SELECT TO_CHAR(DATA_HORA, 'DD/MM/YYYY HH24:MI') AS DATA_FORMATADA, 
                        TIPO_EVENTO, 
@@ -759,7 +660,6 @@ def consultar_historico_tartaruga(conn):
             
             eventos = cursor.fetchall()
             
-        # 3. Exibição dos resultados formatados
         print("\n=======================================================")
         print(f" HISTÓRICO: {codigo_anilha} | {especie} ({sexo})")
         print("=======================================================")
@@ -778,14 +678,10 @@ def consultar_historico_tartaruga(conn):
         print(e)
 
 def consultar_estatisticas_area(conn, unidade):
-    """
-    Gera um relatório sintético da área de monitoramento em que o usuário está logado no momento.
-    """
     try:
         print(f"\n=== ESTATÍSTICAS DA BASE: {unidade['cidade']} - {unidade['uf']} ===")
         
         with conn.cursor() as cursor:
-            # Conta os Resgates
             cursor.execute("""
                 SELECT COUNT(*), SUM(CASE WHEN REABILITACAO = 'V' THEN 1 ELSE 0 END)
                 FROM RESGATE_ENCALHE 
@@ -795,7 +691,6 @@ def consultar_estatisticas_area(conn, unidade):
             total_resgates = res_resgates[0] or 0
             reab_resgates = res_resgates[1] or 0
 
-            # Conta as Pescas
             cursor.execute("""
                 SELECT COUNT(*), SUM(CASE WHEN CLASSE = 'Monitorada' THEN 1 ELSE 0 END)
                 FROM PESCA 
@@ -805,7 +700,6 @@ def consultar_estatisticas_area(conn, unidade):
             total_pescas = res_pescas[0] or 0
             pescas_monitoradas = res_pescas[1] or 0
 
-            # Conta as Desovas (e faz um join rápido com Ninho para pegar estatísticas biológicas)
             cursor.execute("""
                 SELECT COUNT(D.CODIGO_ANILHA), SUM(N.N_OVOS), SUM(N.N_FILHOTES)
                 FROM DESOVA D
@@ -817,7 +711,6 @@ def consultar_estatisticas_area(conn, unidade):
             total_ovos = res_desovas[1] or 0
             total_filhotes = res_desovas[2] or 0
 
-        # Exibição do Dashboard no Terminal
         print("\n--- RESGATES E ENCALHES ---")
         print(f"Total de Ocorrências : {total_resgates}")
         print(f"Animais Reabilitados : {reab_resgates}")
@@ -843,93 +736,16 @@ def consultar_estatisticas_area(conn, unidade):
         print("\n[Erro] Falha ao extrair estatísticas da área.")
         print(e)
 
-# funções museu 
-# Função para vender um ingresso
+# FUNÇÕES MUSEU
 def vender_ingresso(conn, unidade):
     try:
         cpf = input("\nCPF do visitante: ").strip()
-
         if not cpf.isdigit():
             print("CPF deve conter apenas números.")
             return
 
         with conn.cursor() as cursor:
-
-            # Verifica se a pessoa existe
-            cursor.execute("""
-                SELECT NOME
-                FROM PESSOA
-                WHERE CPF = :cpf
-            """, {"cpf": cpf})
-
-            resultado = cursor.fetchone()
-
-            if resultado is None:
-                print("\nCliente não encontrado.")
-                print("=== NOVO CADASTRO ===")
-
-                nome = input("Nome: ").strip()
-
-                data_nasc = input("Data de nascimento (DD/MM/YYYY): ").strip()
-
-                while True:
-                    print("\nPrioridade por lei")
-                    print("1 - Nenhuma")
-                    print("2 - Estudante")
-                    print("3 - Idoso")
-                    print("4 - Gestante")
-
-                    opc = input("Opção: ").strip()
-
-                    if opc in ["1", "2", "3", "4"]:
-                        break
-
-                    print("Opção inválida.")
-
-                prioridade = None
-
-                if opc == "2":
-                    prioridade = "Estudante"
-                elif opc == "3":
-                    prioridade = "Idoso"
-                elif opc == "4":
-                    prioridade = "Gestante"
-
-                cursor.execute("""
-                    INSERT INTO PESSOA (
-                        CPF,
-                        NOME,
-                        DATA_NASCIM,
-                        FUNCAO,
-                        PRIORIDADE_LEI
-                    )
-                    VALUES (
-                        :cpf,
-                        :nome,
-                        TO_DATE(:data_nasc,'DD/MM/YYYY'),
-                        NULL,
-                        :prioridade
-                    )
-                """, {
-                    "cpf": cpf,
-                    "nome": nome,
-                    "data_nasc": data_nasc,
-                    "prioridade": prioridade
-                })
-
-                print("\nCliente cadastrado com sucesso.")
-
-            # pessoa existe
-            else:
-                nome = resultado[0]
-
-                cursor.execute("""
-                    SELECT PRIORIDADE_LEI
-                    FROM PESSOA
-                    WHERE CPF = :cpf
-                """, {"cpf": cpf})
-
-                prioridade = cursor.fetchone()[0]
+            nome, prioridade = obter_ou_cadastrar_pessoa(cursor, cpf)
 
             # Verifica se já existe relacionamento VISITA
             cursor.execute("""
@@ -947,57 +763,28 @@ def vender_ingresso(conn, unidade):
             # Não existe o relacionamento VISITA -> registra a visita
             if cursor.fetchone() is None:
                 cursor.execute("""
-                    INSERT INTO VISITA (
-                        CPF,
-                        UF,
-                        CIDADE
-                    )
-                    VALUES (
-                        :cpf,
-                        :uf,
-                        :cidade
-                    )
+                    INSERT INTO VISITA (CPF, UF, CIDADE)
+                    VALUES (:cpf, :uf, :cidade)
                 """, {
                     "cpf": cpf,
                     "uf": unidade["uf"],
                     "cidade": unidade["cidade"]
                 })
 
-            # Agora que já tem certeza da existência da visita, cadastro o ingresso 
-
-            # se pessoa é idosa, ganha gratuidade
             if prioridade == 'Idoso':
                 categoria = 'Gratuidade'
                 valor = 0.00
-
-            # se pessoa tem alguma prioridade por lei, recebe meia entrada
-            elif prioridade != None:
+            elif prioridade is not None:
                 categoria = 'Meia'
                 valor = 20.00
-
-            # pessoa não tem prioridade
             else:
                 categoria = 'Inteira'
                 valor = 40.00
 
             # Cadastro do ingresso
             cursor.execute("""
-                INSERT INTO INGRESSO (
-                    CPF,
-                    UF,
-                    CIDADE,
-                    DATA_HORA,
-                    VALOR,
-                    CATEGORIA
-                )
-                VALUES (
-                    :cpf,
-                    :uf,
-                    :cidade,
-                    SYSDATE,
-                    :valor,
-                    :categoria
-                )
+                INSERT INTO INGRESSO (CPF, UF, CIDADE, DATA_HORA, VALOR, CATEGORIA)
+                VALUES (:cpf, :uf, :cidade, SYSDATE, :valor, :categoria)
             """, {
                 "cpf": cpf,
                 "uf": unidade["uf"],
@@ -1007,7 +794,6 @@ def vender_ingresso(conn, unidade):
             })
 
         conn.commit()
-
         momento = datetime.now()
 
         print("\n====================================")
@@ -1017,24 +803,10 @@ def vender_ingresso(conn, unidade):
         print("------------------------------------")
         print(f"Cliente......: {nome}")
         print(f"CPF..........: {cpf}")
-
-        if prioridade:
-            print(f"Prioridade...: {prioridade}")
-        else:
-            print("Prioridade...: Nenhuma")
-
-        print(
-            f"Museu.........: "
-            f"{unidade['uf']} - {unidade['cidade']}"
-        )
-
+        print(f"Prioridade...: {prioridade if prioridade else 'Nenhuma'}")
+        print(f"Museu........: {unidade['uf']} - {unidade['cidade']}")
         print(f"Valor........: R$ {valor:.2f}")
-
-        print(
-            "Data/Hora....: "
-            f"{momento.strftime('%d/%m/%Y %H:%M:%S')}"
-        )
-
+        print(f"Data/Hora....: {momento.strftime('%d/%m/%Y %H:%M:%S')}")
         print("====================================")
 
     except Exception as e:
@@ -1042,12 +814,9 @@ def vender_ingresso(conn, unidade):
         print("\nErro ao registrar pedido.")
         print(e)
 
-# Função para consultar faturamento do museu
 def consultar_faturamento_museu(conn, unidade):
     try:
         with conn.cursor() as cursor:
-
-            # pegar todos os ingressos (e estatísticas)
             cursor.execute("""
                 SELECT
                     COUNT(*) AS quantidade_ingressos,
@@ -1058,22 +827,19 @@ def consultar_faturamento_museu(conn, unidade):
                 FROM INGRESSO
                 WHERE UF = :uf
                   AND CIDADE = :cidade
-                  AND EXTRACT(MONTH FROM DATA_HORA) =
-                      EXTRACT(MONTH FROM SYSDATE)
-                  AND EXTRACT(YEAR FROM DATA_HORA) =
-                      EXTRACT(YEAR FROM SYSDATE)
+                  AND EXTRACT(MONTH FROM DATA_HORA) = EXTRACT(MONTH FROM SYSDATE)
+                  AND EXTRACT(YEAR FROM DATA_HORA) = EXTRACT(YEAR FROM SYSDATE)
             """, {
                 "uf": unidade["uf"],
                 "cidade": unidade["cidade"]
             })
 
             resultado = cursor.fetchone()
-
-            qtd_ingressos = resultado[0] # qtd de ingressos vendidos
-            faturamento = resultado[1] # valor do faturamento total
-            qtd_gratuidade = resultado[2] # qtd de ingressos gratis vendidos
-            qtd_meia = resultado[3] # qtd de meia entrada vendidas
-            qtd_inteira = resultado[4] # qtd de inteiras vendidas
+            qtd_ingressos = resultado[0] 
+            faturamento = resultado[1] 
+            qtd_gratuidade = resultado[2] 
+            qtd_meia = resultado[3] 
+            qtd_inteira = resultado[4] 
 
             print("\n====================================")
             print(" FATURAMENTO MENSAL")
@@ -1090,14 +856,21 @@ def consultar_faturamento_museu(conn, unidade):
     except Exception as e:
         print(f"\nErro ao consultar faturamento: {e}")
 
-# Função para consultar visitantes do dia
 def consultar_visitantes_dia(conn, unidade):
     try:
         with conn.cursor() as cursor:
-            # entrar com a data que deseja-se fazer a consulta
-            data = input("Data (DD/MM/YYYY): ").strip()
+            # Lógica de bloqueio para datas não passarem do presente momento
+            while True:
+                data = input("Data (DD/MM/YYYY): ").strip()
+                try:
+                    dt_obj = datetime.strptime(data, "%d/%m/%Y")
+                    if dt_obj > datetime.now():
+                        print("[Erro] Não é possível consultar datas no futuro.")
+                        continue
+                    break
+                except ValueError:
+                    print("[Erro] Formato inválido. Use DD/MM/YYYY.")
 
-            # selecionar os ingressos do dia
             cursor.execute("""
                 SELECT
                     CPF,
@@ -1128,23 +901,12 @@ def consultar_visitantes_dia(conn, unidade):
                 return
 
             total = 0
-
-            # configuração para mostrar os resultados
-            print(
-                f"{'CPF':<15} "
-                f"{'DATA':<20} "
-                f"{'VALOR':>11}"
-            )
+            print(f"{'CPF':<15} {'DATA':<20} {'VALOR':>11}")
             print("-" * 50)
 
             for cpf, data_hora, categoria, valor in ingressos:
                 total += valor
-
-                print(
-                    f"{cpf:<15} "
-                    f"{data_hora:<20} "
-                    f"{categoria:>11}"
-                )
+                print(f"{cpf:<15} {data_hora:<20} {categoria:>11}")
 
             print("-" * 50)
             print(f"Total de ingressos: {len(ingressos)}")
@@ -1153,7 +915,8 @@ def consultar_visitantes_dia(conn, unidade):
     except Exception as e:
         print(f"\nErro ao consultar ingressos: {e}")
 
-# ÁREA DE MONITORAMENTO
+
+# MENUS
 def menu_monitoramento(conn, unidade):
     while True:
         print("\n====================================")
@@ -1186,11 +949,8 @@ def menu_monitoramento(conn, unidade):
         else:
             print("Opção inválida.")
 
-# MUSEU
 def menu_museu(conn, unidade):
-
     while True:
-
         print("\n====================================")
         print(" MUSEU")
         print("====================================")
@@ -1206,24 +966,17 @@ def menu_museu(conn, unidade):
 
         if opcao == "1":
             vender_ingresso(conn, unidade)
-
         elif opcao == "2":
             consultar_faturamento_museu(conn, unidade)
-
         elif opcao == "3":
             consultar_visitantes_dia(conn, unidade)
-
         elif opcao == "0":
             break
-
         else:
             print("Opção inválida.")
 
-# LOJA
 def menu_loja(conn, unidade):
-
     while True:
-
         print("\n====================================")
         print(" LOJA")
         print("====================================")
@@ -1239,31 +992,23 @@ def menu_loja(conn, unidade):
 
         if opcao == "1":
             registrar_pedido(conn, unidade)
-
         elif opcao == "2":
             consultar_faturamento_loja(conn, unidade)
-
         elif opcao == "3":
             consultar_pedidos(conn, unidade)
-
         elif opcao == "0":
             break
-
         else:
             print("Opção inválida.")
 
-# consulta 5 - resumo operacional por base 
+
+# CONSULTA 5 - RESUMO OPERACIONAL POR BASE: DASHBOARD
 def exibir_dashboard_estados(conn):
-    """
-    Executa a Consulta 5  e exibe um Dashboard Executivo 
-    resumido por Estado diretamente no terminal.
-    """
     try:
         print("\n" + "=" * 75)
         print(" DASHBOARD EXECUTIVO: RESUMO DAS BASES POR ESTADO ".center(75))
         print("=" * 75)
 
-        # A string SQL completa encapsulada
         sql = """
             WITH 
             -- 1. ESTRUTURA FÍSICA
@@ -1398,28 +1143,22 @@ def exibir_dashboard_estados(conn):
             print("\n[Aviso] Nenhum dado encontrado para gerar o dashboard.")
             return
 
-        # Desempacotando e imprimindo cada linha em formato de "Card"
         for row in resultados:
             (uf, lojas, museus, areas, arrecadacao, clientes, visitantes,
              funcionarios, pesquisadores, artesaos, custo_equipe,
              total_eventos, tartarugas, total_resgates, media_resgates,
              taxa_reab, total_pescas, pescas_monit, total_desovas, taxa_eclosao) = row
 
-            # Tratamento de valores None que o Oracle pode retornar devido ao NULLIF
             media_resgates = media_resgates if media_resgates is not None else 0.0
             taxa_reab = taxa_reab if taxa_reab is not None else 0.0
             taxa_eclosao = taxa_eclosao if taxa_eclosao is not None else 0.0
 
             print(f"\n[{uf}] RELATÓRIO ESTADUAL ".ljust(75, "-"))
-            
             print(f" ESTRUTURA:   {lojas} Loja(s) | {museus} Museu(s) | {areas} Área(s) de Monitoramento")
-            
             print(f" FINANCEIRO:  Arrecadação Total: R$ {arrecadacao:,.2f}")
             print(f"                 Público Atendido: {clientes} Cliente(s) | {visitantes} Visitante(s)")
-            
             print(f" EQUIPE:      Custo Local: R$ {custo_equipe:,.2f}")
             print(f"                 Membros: {funcionarios} Funcionário(s) | {pesquisadores} Pesquisador(es) | {artesaos} Artesão(s)")
-            
             print(f" AMBIENTAL:   Total de Eventos: {total_eventos} | Tartarugas Monitoradas: {tartarugas}")
             print(f"                 - Resgates: {total_resgates} (Média por Área: {media_resgates:.1f})")
             print(f"                 - Pescas:   {total_pescas} ({pescas_monit} monitoradas)")
@@ -1433,10 +1172,8 @@ def exibir_dashboard_estados(conn):
         print(e)
 
 
-
-# MENU PRINCIPAL
+# MAIN
 def menu_principal():
-
     print("\n====================================")
     print(" SISTEMA PROJETO TAMAR")
     print("====================================")
@@ -1447,59 +1184,33 @@ def menu_principal():
     print("5 - Resumo operacional por base")
     print("0 - Sair")
 
-
-# MAIN
 def main():
-
     conn = conectar()
-
     if conn is None:
         print("Não foi possível conectar ao banco.")
         return
 
     try:
-
         while True:
-
             menu_principal()
-
             opcao = input("\nEscolha uma opção: ")
 
             if opcao == "1":
-
-                unidade = selecionar_unidade(
-                    conn,
-                    "AREA_DE_MONITORAMENTO",
-                    "Área de Monitoramento"
-                )
-
+                unidade = selecionar_unidade(conn, "AREA_DE_MONITORAMENTO", "Área de Monitoramento")
                 if unidade:
                     menu_monitoramento(conn, unidade)
 
             elif opcao == "2":
-
-                unidade = selecionar_unidade(
-                    conn,
-                    "MUSEU",
-                    "Museu"
-                )
-
+                unidade = selecionar_unidade(conn, "MUSEU", "Museu")
                 if unidade:
                     menu_museu(conn, unidade)
 
             elif opcao == "3":
-
-                unidade = selecionar_unidade(
-                    conn,
-                    "LOJA",
-                    "Loja"
-                )
-
+                unidade = selecionar_unidade(conn, "LOJA", "Loja")
                 if unidade:
                     menu_loja(conn, unidade)
 
             elif opcao == "4":
-
                 print("\nAcesso negado.")
                 print("Somente usuários com credencial de gerente podem cadastrar novas unidades.")
 
@@ -1507,32 +1218,25 @@ def main():
                 exibir_dashboard_estados(conn)
 
             elif opcao == "0":
-
                 print("\nEncerrando sistema...")
                 break
 
             else:
-
                 print("Opção inválida.")
 
     except KeyboardInterrupt:
-
         print("\nSistema interrompido pelo usuário.")
 
     except Exception as e:
-
         print(f"\nErro inesperado: {e}")
-
         try:
             conn.rollback()
         except:
             pass
 
     finally:
-
         conn.close()
         print("Conexão encerrada.")
-
 
 if __name__ == "__main__":
     main()
