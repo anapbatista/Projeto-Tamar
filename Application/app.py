@@ -1053,7 +1053,317 @@ def consultar_estatisticas_area(conn, unidade):
     except Exception as erro:
         print(f"erro ao consultar estatísticas: {erro}")
 
+# === funções museu ===
+# Função para vender um ingresso
+def vender_ingresso(conn, unidade):
+    try:
+        cpf = input("\nCPF do visitante: ").strip()
 
+        if not cpf.isdigit():
+            print("CPF deve conter apenas números.")
+            return
+
+        with conn.cursor() as cursor:
+
+            # Verifica se a pessoa existe
+            cursor.execute("""
+                SELECT NOME
+                FROM PESSOA
+                WHERE CPF = :cpf
+            """, {"cpf": cpf})
+
+            resultado = cursor.fetchone()
+
+            if resultado is None:
+                print("\nCliente não encontrado.")
+                print("=== NOVO CADASTRO ===")
+
+                nome = input("Nome: ").strip()
+
+                data_nasc = input("Data de nascimento (DD/MM/YYYY): ").strip()
+
+                while True:
+                    print("\nPrioridade por lei")
+                    print("1 - Nenhuma")
+                    print("2 - Estudante")
+                    print("3 - Idoso")
+                    print("4 - Gestante")
+
+                    opc = input("Opção: ").strip()
+
+                    if opc in ["1", "2", "3", "4"]:
+                        break
+
+                    print("Opção inválida.")
+
+                prioridade = None
+
+                if opc == "2":
+                    prioridade = "Estudante"
+                elif opc == "3":
+                    prioridade = "Idoso"
+                elif opc == "4":
+                    prioridade = "Gestante"
+
+                cursor.execute("""
+                    INSERT INTO PESSOA (
+                        CPF,
+                        NOME,
+                        DATA_NASCIM,
+                        FUNCAO,
+                        PRIORIDADE_LEI
+                    )
+                    VALUES (
+                        :cpf,
+                        :nome,
+                        TO_DATE(:data_nasc,'DD/MM/YYYY'),
+                        NULL,
+                        :prioridade
+                    )
+                """, {
+                    "cpf": cpf,
+                    "nome": nome,
+                    "data_nasc": data_nasc,
+                    "prioridade": prioridade
+                })
+
+                print("\nCliente cadastrado com sucesso.")
+
+            # pessoa existe
+            else:
+                nome = resultado[0]
+
+                cursor.execute("""
+                    SELECT PRIORIDADE_LEI
+                    FROM PESSOA
+                    WHERE CPF = :cpf
+                """, {"cpf": cpf})
+
+                prioridade = cursor.fetchone()[0]
+
+            # Verifica se já existe relacionamento VISITA
+            cursor.execute("""
+                SELECT 1
+                FROM VISITA
+                WHERE CPF = :cpf
+                  AND UF = :uf
+                  AND CIDADE = :cidade
+            """, {
+                "cpf": cpf,
+                "uf": unidade["uf"],
+                "cidade": unidade["cidade"]
+            })
+
+            # Não existe o relacionamento VISITA -> registra a visita
+            if cursor.fetchone() is None:
+                cursor.execute("""
+                    INSERT INTO VISITA (
+                        CPF,
+                        UF,
+                        CIDADE
+                    )
+                    VALUES (
+                        :cpf,
+                        :uf,
+                        :cidade
+                    )
+                """, {
+                    "cpf": cpf,
+                    "uf": unidade["uf"],
+                    "cidade": unidade["cidade"]
+                })
+
+            # Agora que já tem certeza da existência da visita, cadastro o ingresso 
+
+            # se pessoa é idosa, ganha gratuidade
+            if prioridade == 'Idoso':
+                categoria = 'Gratuidade'
+                valor = 0.00
+
+            # se pessoa tem alguma prioridade por lei, recebe meia entrada
+            elif prioridade != None:
+                categoria = 'Meia'
+                valor = 20.00
+
+            # pessoa não tem prioridade
+            else:
+                categoria = 'Inteira'
+                valor = 40.00
+
+            # Cadastro do ingresso
+            cursor.execute("""
+                INSERT INTO INGRESSO (
+                    CPF,
+                    UF,
+                    CIDADE,
+                    DATA_HORA,
+                    VALOR,
+                    CATEGORIA
+                )
+                VALUES (
+                    :cpf,
+                    :uf,
+                    :cidade,
+                    SYSDATE,
+                    :valor,
+                    :categoria
+                )
+            """, {
+                "cpf": cpf,
+                "uf": unidade["uf"],
+                "cidade": unidade["cidade"],
+                "valor": valor,
+                "categoria": categoria
+            })
+
+        conn.commit()
+
+        momento = datetime.now()
+
+        print("\n====================================")
+        print("          PROJETO TAMAR")
+        print("====================================")
+        print("Ingresso registrado com sucesso")
+        print("------------------------------------")
+        print(f"Cliente......: {nome}")
+        print(f"CPF..........: {cpf}")
+
+        if prioridade:
+            print(f"Prioridade...: {prioridade}")
+        else:
+            print("Prioridade...: Nenhuma")
+
+        print(
+            f"Museu.........: "
+            f"{unidade['uf']} - {unidade['cidade']}"
+        )
+
+        print(f"Valor........: R$ {valor:.2f}")
+
+        print(
+            "Data/Hora....: "
+            f"{momento.strftime('%d/%m/%Y %H:%M:%S')}"
+        )
+
+        print("====================================")
+
+    except Exception as e:
+        conn.rollback()
+        print("\nErro ao registrar pedido.")
+        print(e)
+
+# Função para consultar faturamento do museu
+def consultar_faturamento_museu(conn, unidade):
+    try:
+        with conn.cursor() as cursor:
+
+            # pegar todos os ingressos (e estatísticas)
+            cursor.execute("""
+                SELECT
+                    COUNT(*) AS quantidade_ingressos,
+                    NVL(SUM(VALOR), 0) AS faturamento_total,
+                    NVL(SUM(CASE WHEN CATEGORIA = 'Gratuidade' THEN 1 ELSE 0 END), 0) AS qtd_gratuidade,
+                    NVL(SUM(CASE WHEN CATEGORIA = 'Meia' THEN 1 ELSE 0 END), 0) AS qtd_meia,
+                    NVL(SUM(CASE WHEN CATEGORIA = 'Inteira' THEN 1 ELSE 0 END), 0) AS qtd_inteira
+                FROM INGRESSO
+                WHERE UF = :uf
+                  AND CIDADE = :cidade
+                  AND EXTRACT(MONTH FROM DATA_HORA) =
+                      EXTRACT(MONTH FROM SYSDATE)
+                  AND EXTRACT(YEAR FROM DATA_HORA) =
+                      EXTRACT(YEAR FROM SYSDATE)
+            """, {
+                "uf": unidade["uf"],
+                "cidade": unidade["cidade"]
+            })
+
+            resultado = cursor.fetchone()
+
+            qtd_ingressos = resultado[0] # qtd de ingressos vendidos
+            faturamento = resultado[1] # valor do faturamento total
+            qtd_gratuidade = resultado[2] # qtd de ingressos gratis vendidos
+            qtd_meia = resultado[3] # qtd de meia entrada vendidas
+            qtd_inteira = resultado[4] # qtd de inteiras vendidas
+
+            print("\n====================================")
+            print(" FATURAMENTO MENSAL")
+            print("====================================")
+            print(f"Museu: {unidade['cidade']} - {unidade['uf']}")
+            print("------------------------------------")
+            print(f"Ingressos no mês: {qtd_ingressos}")
+            print(f"Faturamento: R$ {faturamento:.2f}")
+            print(f"Quantidade de ingressos gratuitos vendidos: {qtd_gratuidade}")
+            print(f"Quantidade de meia-entradas vendidas: {qtd_meia}")
+            print(f"Quantidade de inteiras vendidas: {qtd_inteira}")
+            print("====================================")
+
+    except Exception as e:
+        print(f"\nErro ao consultar faturamento: {e}")
+
+# Função para consultar visitantes do dia
+def consultar_visitantes_dia(conn, unidade):
+    try:
+        with conn.cursor() as cursor:
+            # entrar com a data que deseja-se fazer a consulta
+            data = input("Data (DD/MM/YYYY): ").strip()
+
+            # selecionar os ingressos do dia
+            cursor.execute("""
+                SELECT
+                    CPF,
+                    TO_CHAR(DATA_HORA, 'DD/MM/YYYY HH24:MI'),
+                    CATEGORIA,
+                    VALOR
+                FROM INGRESSO
+                WHERE UF = :uf
+                  AND CIDADE = :cidade
+                  AND TRUNC(DATA_HORA) = TO_DATE(:data, 'DD/MM/YYYY')
+                ORDER BY DATA_HORA DESC
+            """, {
+                "uf": unidade["uf"],
+                "cidade": unidade["cidade"],
+                "data": data
+            })
+
+            ingressos = cursor.fetchall()
+
+            print("\n====================================")
+            print(f" VISITANTES DO DIA {data}")
+            print("====================================")
+            print(f"Museu: {unidade['cidade']} - {unidade['uf']}")
+            print("------------------------------------")
+
+            if not ingressos:
+                print("Nenhum visitante encontrado.")
+                return
+
+            total = 0
+
+            # configuração para mostrar os resultados
+            print(
+                f"{'CPF':<15} "
+                f"{'DATA':<20} "
+                f"{'VALOR':>11}"
+            )
+            print("-" * 50)
+
+            for cpf, data_hora, categoria, valor in ingressos:
+                total += valor
+
+                print(
+                    f"{cpf:<15} "
+                    f"{data_hora:<20} "
+                    f"{categoria:>11}"
+                )
+
+            print("-" * 50)
+            print(f"Total de ingressos: {len(ingressos)}")
+            print(f"Valor movimentado: R$ {total:.2f}")
+
+    except Exception as e:
+        print(f"\nErro ao consultar ingressos: {e}")
+
+# ÁREA DE MONITORAMENTO
 def menu_monitoramento(conn, unidade):
     while True:
         print("\n====================================")
@@ -1089,9 +1399,7 @@ def menu_monitoramento(conn, unidade):
         else:
             print("Opção inválida.")
 
-
 # MUSEU
-
 def menu_museu(conn, unidade):
 
     while True:
@@ -1110,13 +1418,13 @@ def menu_museu(conn, unidade):
         opcao = input("\nEscolha uma opção: ")
 
         if opcao == "1":
-            print("Funcionalidade em desenvolvimento.")
+            vender_ingresso(conn, unidade)
 
         elif opcao == "2":
-            print("Funcionalidade em desenvolvimento.")
+            consultar_faturamento_museu(conn, unidade)
 
         elif opcao == "3":
-            print("Funcionalidade em desenvolvimento.")
+            consultar_visitantes_dia(conn, unidade)
 
         elif opcao == "0":
             break
@@ -1124,9 +1432,7 @@ def menu_museu(conn, unidade):
         else:
             print("Opção inválida.")
 
-
 # LOJA
-
 def menu_loja(conn, unidade):
 
     while True:
@@ -1161,7 +1467,6 @@ def menu_loja(conn, unidade):
 
 
 # MENU PRINCIPAL
-
 def menu_principal():
 
     print("\n====================================")
@@ -1176,7 +1481,6 @@ def menu_principal():
 
 
 # MAIN
-
 def main():
 
     conn = conectar()
