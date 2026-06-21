@@ -36,7 +36,7 @@ O repositório está organizado em diretórios semânticos para facilitar a nave
 * `requirements.txt`: Mapeamento das bibliotecas e dependências Python do projeto.
 
 
-* **`/` (Raiz)**: Documentação em texto/PDF referente ao levantamento de requisitos, diagramas de Entidade-Relacionamento (DER) e o relatório final.
+* **`/` (Raiz)**: Relatório final contendo todas as etapas, completas e corrigidas, segundo especificação da disciplina.
 
 ---
 
