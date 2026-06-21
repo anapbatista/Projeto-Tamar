@@ -376,7 +376,7 @@ def consultar_pedidos(conn, unidade):
 # ÁREA DE MONITORAMENTO
 
 # min = minimo
-def float(mensagem, min=0.0):
+def ler_float(mensagem, min=0.0):
     while True:
         entrar = input(mensagem).strip().replace(",", ".")
 
@@ -391,7 +391,7 @@ def float(mensagem, min=0.0):
             print("Valor não permitido")
 
 
-def inteiro(mensagem,min=0):
+def ler_inteiro(mensagem,min=0):
     while True:
         entrar = input(mensagem).strip()
         try:
@@ -534,8 +534,8 @@ def cadastrar_tartaruga(conn):
                     break
                 print("opcao nao permitida")
 
-            peso = float("Peso em kg: ", minimo=0.0)
-            tamanho_casco = float("Tamanho do casco em cm: ", minimo=0.0)
+            peso = ler_float("Peso em kg: ", minimo=0.0)
+            tamanho_casco = ler_float("Tamanho do casco em cm: ", minimo=0.0)
 
             while True:
                 sexo = input("Sexo (F/M): ").strip().upper()
@@ -779,8 +779,8 @@ def registrar_desova(conn,unidade):
                 return
 
             lat_long = input("Latitude e longitude: ").strip()
-            n_ovos = inteiro("Número de ovos: ", minimo=0)
-            n_filhotes = inteiro("Número de filhotes: ", minimo=0)
+            n_ovos = ler_inteiro("Número de ovos: ", minimo=0)
+            n_filhotes = ler_inteiro("Número de filhotes: ", minimo=0)
 
             if n_filhotes > n_ovos:
                 print("o número de filhotes não pode ser maior que o número de ovos")
