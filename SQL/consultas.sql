@@ -64,8 +64,46 @@ WHERE (n1.n_filhotes / n1.n_ovos) > (
     WHERE t2.nome_cientifico = t1.nome_cientifico
 );
 
+/* CONSULTA 3: TARTARUGAS REABILITADAS COM EVENTOS POSTERIORES
+Objetivo: Identificar tartarugas que, após passarem por um processo 
+de reabilitação e serem registradas como vivas em um resgate/encalhe,
+continuaram participando de atividades monitoradas (pesca ou desova).
 
-/* CONSULTA 3: SUBCONSULTA DERIVADA COM AGREGAÇÃO
+Justificativa: Permite avaliar a eficácia dos processos de reabilitação
+e reinserção do projeto, comprovando que o animal retornou à natureza 
+saudável e ativo (comprovado por eventos subsequentes). */
+SELECT 
+    t.nome_cientifico,
+    r.codigo_anilha,
+    COUNT(e.data_hora) AS qnt_eventos,
+    NVL(SUM(n.n_ovos), 0) AS total_ovos
+FROM Resgate_Encalhe r
+JOIN Tartaruga t
+    ON t.codigo_anilha = r.codigo_anilha
+LEFT JOIN (
+    SELECT codigo_anilha, data_hora
+    FROM Pesca
+    UNION ALL
+    SELECT codigo_anilha, data_hora
+    FROM Desova
+) e
+    ON e.codigo_anilha = r.codigo_anilha
+   AND e.data_hora > r.data_hora
+LEFT JOIN Desova d
+    ON d.codigo_anilha = e.codigo_anilha
+   AND d.data_hora = e.data_hora
+LEFT JOIN Ninho n
+    ON n.codigo_estaca = d.codigo_estaca
+WHERE r.UF = 'BA'
+  AND r.vivo = 'V'
+  AND r.reabilitacao = 'V'
+GROUP BY 
+    t.nome_cientifico, 
+    r.codigo_anilha
+HAVING COUNT(e.data_hora) > 0;
+
+
+/* CONSULTA 4: SUBCONSULTA DERIVADA COM AGREGAÇÃO
 Objetivo: Retornar todos os pesquisadores, seus nomes, CPFs, no que 
 atuam (resgate/encalhe, pesca ou desova), remunerações, formações e 
 seus respectivos auxiliares.
@@ -113,7 +151,7 @@ LEFT JOIN (
 ORDER BY pes.Nome;
 
 
-/* CONSULTA 4: RESUMO DAS BASES POR ESTADO (DASHBOARD)
+/* CONSULTA 5: RESUMO DAS BASES POR ESTADO (DASHBOARD)
 Objetivo: Apresentar uma visão analítica de cada estado, incluindo 
 unidades de atuação, arrecadação, pessoas atendidas, colaboradores, 
 custos da equipe e indicadores de monitoramento ambiental.
@@ -245,42 +283,3 @@ LEFT JOIN CTE_Pescas pe ON b.UF = pe.UF
 LEFT JOIN CTE_Desovas d ON b.UF = d.UF
 LEFT JOIN CTE_Tartarugas t ON b.UF = t.UF
 ORDER BY b.UF;
-
-
-/* CONSULTA 5: TARTARUGAS REABILITADAS COM EVENTOS POSTERIORES
-Objetivo: Identificar tartarugas que, após passarem por um processo 
-de reabilitação e serem registradas como vivas em um resgate/encalhe,
-continuaram participando de atividades monitoradas (pesca ou desova).
-
-Justificativa: Permite avaliar a eficácia dos processos de reabilitação
-e reinserção do projeto, comprovando que o animal retornou à natureza 
-saudável e ativo (comprovado por eventos subsequentes). */
-SELECT 
-    t.nome_cientifico,
-    r.codigo_anilha,
-    COUNT(e.data_hora) AS qnt_eventos,
-    NVL(SUM(n.n_ovos), 0) AS total_ovos
-FROM Resgate_Encalhe r
-JOIN Tartaruga t
-    ON t.codigo_anilha = r.codigo_anilha
-LEFT JOIN (
-    SELECT codigo_anilha, data_hora
-    FROM Pesca
-    UNION ALL
-    SELECT codigo_anilha, data_hora
-    FROM Desova
-) e
-    ON e.codigo_anilha = r.codigo_anilha
-   AND e.data_hora > r.data_hora
-LEFT JOIN Desova d
-    ON d.codigo_anilha = e.codigo_anilha
-   AND d.data_hora = e.data_hora
-LEFT JOIN Ninho n
-    ON n.codigo_estaca = d.codigo_estaca
-WHERE r.UF = 'BA'
-  AND r.vivo = 'V'
-  AND r.reabilitacao = 'V'
-GROUP BY 
-    t.nome_cientifico, 
-    r.codigo_anilha
-HAVING COUNT(e.data_hora) > 0;
