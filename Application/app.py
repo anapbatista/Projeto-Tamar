@@ -1387,7 +1387,7 @@ def exibir_dashboard_estados(conn):
             LEFT JOIN CTE_Pescas pe ON b.UF = pe.UF
             LEFT JOIN CTE_Desovas d ON b.UF = d.UF
             LEFT JOIN CTE_Tartarugas t ON b.UF = t.UF
-            ORDER BY "Arrecadação Total (R$)" DESC, b.UF;
+            ORDER BY "Arrecadação Total (R$)" DESC, b.UF
         """
 
         with conn.cursor() as cursor:
@@ -1412,15 +1412,15 @@ def exibir_dashboard_estados(conn):
 
             print(f"\n[{uf}] RELATÓRIO ESTADUAL ".ljust(75, "-"))
             
-            print(f" 🏢 ESTRUTURA:   {lojas} Loja(s) | {museus} Museu(s) | {areas} Área(s) de Monitoramento")
+            print(f" ESTRUTURA:   {lojas} Loja(s) | {museus} Museu(s) | {areas} Área(s) de Monitoramento")
             
-            print(f" 💰 FINANCEIRO:  Arrecadação Total: R$ {arrecadacao:,.2f}")
+            print(f" FINANCEIRO:  Arrecadação Total: R$ {arrecadacao:,.2f}")
             print(f"                 Público Atendido: {clientes} Cliente(s) | {visitantes} Visitante(s)")
             
-            print(f" 👥 EQUIPE:      Custo Local: R$ {custo_equipe:,.2f}")
+            print(f" EQUIPE:      Custo Local: R$ {custo_equipe:,.2f}")
             print(f"                 Membros: {funcionarios} Funcionário(s) | {pesquisadores} Pesquisador(es) | {artesaos} Artesão(s)")
             
-            print(f" 🐢 AMBIENTAL:   Total de Eventos: {total_eventos} | Tartarugas Monitoradas: {tartarugas}")
+            print(f" AMBIENTAL:   Total de Eventos: {total_eventos} | Tartarugas Monitoradas: {tartarugas}")
             print(f"                 - Resgates: {total_resgates} (Média por Área: {media_resgates:.1f})")
             print(f"                 - Pescas:   {total_pescas} ({pescas_monit} monitoradas)")
             print(f"                 - Desovas:  {total_desovas} (Taxa de Eclosão: {taxa_eclosao:.1f}%)")
