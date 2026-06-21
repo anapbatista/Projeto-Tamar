@@ -376,6 +376,37 @@ def consultar_pedidos(conn, unidade):
 # funções area de monitoramento
 
 # modularização
+
+def obter_data_hora_evento():
+    """Captura a data e hora do usuário forçando a precisão de hora inteira."""
+    while True:
+        dt_str = input("\nData e Hora do evento (DD/MM/AAAA HH): ").strip()
+        try:
+            # O formato '%d/%m/%Y %H' obriga o usuário a digitar apenas até a hora
+            dt_obj = datetime.strptime(dt_str, "%d/%m/%Y %H")
+            
+            # Converte de volta para string preenchendo minutos e segundos com zeros
+            # Formato compatível com o TO_DATE do Oracle
+            return dt_obj.strftime("%d/%m/%Y %H:00:00")
+        except ValueError:
+            print("[Erro] Formato inválido. Digite no padrão DD/MM/AAAA HH (Exemplo: 21/06/2026 14).")
+
+def verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
+    """Verifica na tabela Classificacoes se a tartaruga já tem evento nesta exata hora."""
+    cursor.execute("""
+        SELECT CLASSIFICACAO 
+        FROM CLASSIFICACOES 
+        WHERE CODIGO_ANILHA = :codigo 
+          AND DATA_HORA = TO_DATE(:dt, 'DD/MM/YYYY HH24:MI:SS')
+    """, {"codigo": codigo_anilha, "dt": data_hora_str})
+    
+    resultado = cursor.fetchone()
+    if resultado is not None:
+        tipo_evento = resultado[0]
+        print(f"\n[Erro de Unicidade] A tartaruga {codigo_anilha} já possui um evento de '{tipo_evento}' registrado exatamente nesta data e hora.")
+        return True # Existe conflito temporal
+    return False # Caminho livre
+
 def obter_pesquisador(cursor):
     """Solicita, valida e verifica a existência do pesquisador no banco."""
     cpf_pesq = input("CPF do Pesquisador Responsável: ").strip().replace(".", "").replace("-", "")
@@ -484,27 +515,34 @@ def registrar_resgate_encalhe(conn, unidade):
             codigo_anilha = obter_ou_cadastrar_tartaruga(cursor)
             if not codigo_anilha: return
 
-            motivo = input("\nMotivo do resgate/encalhe (Pressione Enter para nulo): ").strip()
+            # Nova lógica de Data e Hora com verificação de conflito
+            data_hora_str = obter_data_hora_evento()
+            if verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
+                return # Interrompe a função se a tartaruga já tiver evento nesta hora
+
+            motivo = input("\nMotivo do resgate/encalhe (Enter para nulo): ").strip()
             motivo = motivo if motivo != "" else None
 
-            vivo = obter_input_vf("A tartaruga foi encontrada viva? (V/F ou Enter para nulo): ")
-            reabilitacao = obter_input_vf("Será encaminhada para reabilitação? (V/F ou Enter para nulo): ")
+            vivo = obter_input_vf("A tartaruga foi encontrada viva? (V/F ou Enter): ")
+            reabilitacao = obter_input_vf("Será encaminhada para reabilitação? (V/F ou Enter): ")
 
             if vivo == "V" and reabilitacao != "V":
                 print("\n[Nota do Sistema] Conforme protocolo do Projeto Tamar, tartarugas vivas resgatadas devem ir para reabilitação.")
                 reabilitacao = "V"
 
+            # Inserção atualizada para usar a data fornecida pelo usuário
             cursor.execute("""
                 INSERT INTO CLASSIFICACOES (CODIGO_ANILHA, DATA_HORA, CLASSIFICACAO)
-                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), 'Resgate')
-            """, {"codigo": codigo_anilha})
+                VALUES (:codigo, TO_DATE(:dt, 'DD/MM/YYYY HH24:MI:SS'), 'Resgate')
+            """, {"codigo": codigo_anilha, "dt": data_hora_str})
 
             cursor.execute("""
                 INSERT INTO RESGATE_ENCALHE (CODIGO_ANILHA, DATA_HORA, UF, CIDADE, CPF_PESQ, MOTIVO, VIVO, REABILITACAO)
-                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), :uf, :cidade, :cpf_pesq, :motivo, :vivo, :reabilitacao)
+                VALUES (:codigo, TO_DATE(:dt, 'DD/MM/YYYY HH24:MI:SS'), :uf, :cidade, :cpf_pesq, :motivo, :vivo, :reabilitacao)
             """, {
-                "codigo": codigo_anilha, "uf": unidade["uf"], "cidade": unidade["cidade"],
-                "cpf_pesq": cpf_pesq, "motivo": motivo, "vivo": vivo, "reabilitacao": reabilitacao
+                "codigo": codigo_anilha, "dt": data_hora_str, "uf": unidade["uf"], 
+                "cidade": unidade["cidade"], "cpf_pesq": cpf_pesq, 
+                "motivo": motivo, "vivo": vivo, "reabilitacao": reabilitacao
             })
 
         conn.commit()
@@ -516,7 +554,7 @@ def registrar_resgate_encalhe(conn, unidade):
         print("------------------------------------")
         print(f"Anilha Tartaruga: {codigo_anilha}")
         print(f"Pesquisador CPF.: {cpf_pesq}")
-        print(f"Data/Hora Base..: {datetime.now().strftime('%d/%m/%Y %H:00:00')}")
+        print(f"Data/Hora Evento: {data_hora_str}")
         print("====================================")
 
     except Exception as e:
@@ -536,13 +574,18 @@ def registrar_pesca(conn, unidade):
             codigo_anilha = obter_ou_cadastrar_tartaruga(cursor)
             if not codigo_anilha: return
 
+            # Nova lógica de Data e Hora com verificação de conflito
+            data_hora_str = obter_data_hora_evento()
+            if verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
+                return
+
             while True:
                 classe = input("\nClasse da Pesca (Monitorada / Não Monitorada ou Enter): ").strip()
                 if classe in ["Monitorada", "Não Monitorada", ""]: break
                 print("[Erro] Entrada inválida. Digite 'Monitorada', 'Não Monitorada' ou deixe vazio.")
             classe = classe if classe != "" else None
 
-            reabilitacao = obter_input_vf("Foi encaminhada para reabilitação? (V/F ou Enter para nulo): ")
+            reabilitacao = obter_input_vf("Foi encaminhada para reabilitação? (V/F ou Enter): ")
 
             if classe == "Não Monitorada" and reabilitacao != "V":
                 print("\n[Nota do Sistema] Capturas acidentais locais exigem reabilitação preventiva.")
@@ -550,15 +593,16 @@ def registrar_pesca(conn, unidade):
 
             cursor.execute("""
                 INSERT INTO CLASSIFICACOES (CODIGO_ANILHA, DATA_HORA, CLASSIFICACAO)
-                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), 'Pesca')
-            """, {"codigo": codigo_anilha})
+                VALUES (:codigo, TO_DATE(:dt, 'DD/MM/YYYY HH24:MI:SS'), 'Pesca')
+            """, {"codigo": codigo_anilha, "dt": data_hora_str})
 
             cursor.execute("""
                 INSERT INTO PESCA (CODIGO_ANILHA, DATA_HORA, UF, CIDADE, CPF_PESQ, CLASSE, REABILITACAO)
-                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), :uf, :cidade, :cpf_pesq, :classe, :reabilitacao)
+                VALUES (:codigo, TO_DATE(:dt, 'DD/MM/YYYY HH24:MI:SS'), :uf, :cidade, :cpf_pesq, :classe, :reabilitacao)
             """, {
-                "codigo": codigo_anilha, "uf": unidade["uf"], "cidade": unidade["cidade"],
-                "cpf_pesq": cpf_pesq, "classe": classe, "reabilitacao": reabilitacao
+                "codigo": codigo_anilha, "dt": data_hora_str, "uf": unidade["uf"], 
+                "cidade": unidade["cidade"], "cpf_pesq": cpf_pesq, 
+                "classe": classe, "reabilitacao": reabilitacao
             })
 
         conn.commit()
@@ -570,7 +614,7 @@ def registrar_pesca(conn, unidade):
         print("------------------------------------")
         print(f"Anilha Tartaruga: {codigo_anilha}")
         print(f"Pesquisador CPF.: {cpf_pesq}")
-        print(f"Data/Hora Base..: {datetime.now().strftime('%d/%m/%Y %H:00:00')}")
+        print(f"Data/Hora Evento: {data_hora_str}")
         print("====================================")
 
     except Exception as e:
@@ -589,6 +633,11 @@ def registrar_desova(conn, unidade):
 
             codigo_anilha = obter_ou_cadastrar_tartaruga(cursor, "\nCódigo da anilha da tartaruga (Fêmea): ")
             if not codigo_anilha: return
+
+            # Nova lógica de Data e Hora com verificação de conflito
+            data_hora_str = obter_data_hora_evento()
+            if verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
+                return
 
             print("\n=== INFORMAÇÕES DO NINHO ASSOCIADO ===")
             while True:
@@ -633,15 +682,15 @@ def registrar_desova(conn, unidade):
 
             cursor.execute("""
                 INSERT INTO CLASSIFICACOES (CODIGO_ANILHA, DATA_HORA, CLASSIFICACAO)
-                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), 'Desova')
-            """, {"codigo": codigo_anilha})
+                VALUES (:codigo, TO_DATE(:dt, 'DD/MM/YYYY HH24:MI:SS'), 'Desova')
+            """, {"codigo": codigo_anilha, "dt": data_hora_str})
 
             cursor.execute("""
                 INSERT INTO DESOVA (CODIGO_ANILHA, DATA_HORA, UF, CIDADE, CPF_PESQ, CODIGO_ESTACA)
-                VALUES (:codigo, TRUNC(SYSDATE, 'HH24'), :uf, :cidade, :cpf_pesq, :codigo_estaca)
+                VALUES (:codigo, TO_DATE(:dt, 'DD/MM/YYYY HH24:MI:SS'), :uf, :cidade, :cpf_pesq, :codigo_estaca)
             """, {
-                "codigo": codigo_anilha, "uf": unidade["uf"], "cidade": unidade["cidade"],
-                "cpf_pesq": cpf_pesq, "codigo_estaca": codigo_estaca
+                "codigo": codigo_anilha, "dt": data_hora_str, "uf": unidade["uf"], 
+                "cidade": unidade["cidade"], "cpf_pesq": cpf_pesq, "codigo_estaca": codigo_estaca
             })
 
         conn.commit()
@@ -653,7 +702,7 @@ def registrar_desova(conn, unidade):
         print("------------------------------------")
         print(f"Anilha Tartaruga: {codigo_anilha}")
         print(f"Código Estaca...: {codigo_estaca}")
-        print(f"Data/Hora Base..: {datetime.now().strftime('%d/%m/%Y %H:00:00')}")
+        print(f"Data/Hora Evento: {data_hora_str}")
         print("====================================")
 
     except Exception as e:
