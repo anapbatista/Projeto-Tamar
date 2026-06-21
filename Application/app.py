@@ -1252,6 +1252,187 @@ def menu_loja(conn, unidade):
         else:
             print("Opção inválida.")
 
+# consulta 5 - resumo operacional por base 
+def exibir_dashboard_estados(conn):
+    """
+    Executa a Consulta 5  e exibe um Dashboard Executivo 
+    resumido por Estado diretamente no terminal.
+    """
+    try:
+        print("\n" + "=" * 75)
+        print(" DASHBOARD EXECUTIVO: RESUMO DAS BASES POR ESTADO ".center(75))
+        print("=" * 75)
+
+        # A string SQL completa encapsulada
+        sql = """
+            WITH 
+            -- 1. ESTRUTURA FÍSICA
+            CTE_Lojas AS (SELECT UF, COUNT(*) AS qtd_lojas FROM Loja GROUP BY UF),
+            CTE_Museus AS (SELECT UF, COUNT(*) AS qtd_museus FROM Museu GROUP BY UF),
+            CTE_Areas AS (SELECT UF, COUNT(*) AS qtd_areas FROM Area_de_Monitoramento GROUP BY UF),
+
+            -- 2. FINANCEIRO E PÚBLICO
+            CTE_Pedidos AS (
+                SELECT UF, SUM(valor) AS total_pedidos, COUNT(DISTINCT CPF) AS qtd_clientes 
+                FROM Pedido GROUP BY UF
+            ),
+            CTE_Ingressos AS (
+                SELECT UF, SUM(valor) AS total_ingressos, COUNT(DISTINCT CPF) AS qtd_visitantes 
+                FROM Ingresso GROUP BY UF
+            ),
+
+            -- 3. RECURSOS HUMANOS E CUSTOS LOCAIS (Abordagem UNION + CASE WHEN)
+            CTE_Pesquisadores_UF AS (
+                SELECT CPF_Pesq AS CPF, UF FROM Resgate_Encalhe UNION
+                SELECT CPF_Pesq AS CPF, UF FROM Pesca UNION
+                SELECT CPF_Pesq AS CPF, UF FROM Desova
+            ),
+            CTE_Equipe_Itens AS (
+                SELECT CPF, UF, 'FUNCIONARIO' AS tipo, NVL(remuneracao, 0) AS custo FROM Funcionario
+                UNION ALL
+                SELECT CPF, UF, 'ARTESAO' AS tipo, NVL(subsidio, 0) AS custo FROM Artesao
+                UNION ALL
+                SELECT pu.CPF, pu.UF, 'PESQUISADOR' AS tipo, NVL(p.remuneracao, 0) AS custo 
+                FROM CTE_Pesquisadores_UF pu 
+                JOIN Pesquisador p ON p.CPF = pu.CPF
+            ),
+            CTE_Equipe AS (
+                SELECT 
+                    UF,
+                    COUNT(DISTINCT CPF) AS total_colaboradores,
+                    COUNT(DISTINCT CASE WHEN tipo = 'FUNCIONARIO' THEN CPF END) AS qtd_funcionarios,
+                    COUNT(DISTINCT CASE WHEN tipo = 'PESQUISADOR' THEN CPF END) AS qtd_pesquisadores,
+                    COUNT(DISTINCT CASE WHEN tipo = 'ARTESAO' THEN CPF END) AS qtd_artesaos,
+                    SUM(custo) AS custo_equipe
+                FROM CTE_Equipe_Itens
+                GROUP BY UF
+            ),
+
+            -- 4. MONITORAMENTO E CONSERVAÇÃO
+            CTE_Resgates AS (
+                SELECT UF, COUNT(*) AS total_resgates, 
+                       SUM(CASE WHEN reabilitacao = 'V' THEN 1 ELSE 0 END) AS qtd_reab_resgate
+                FROM Resgate_Encalhe GROUP BY UF
+            ),
+            CTE_Pescas AS (
+                SELECT UF, COUNT(*) AS total_pescas, 
+                       SUM(CASE WHEN classe = 'Monitorada' THEN 1 ELSE 0 END) AS pescas_monitoradas,
+                       SUM(CASE WHEN reabilitacao = 'V' THEN 1 ELSE 0 END) AS qtd_reab_pesca
+                FROM Pesca GROUP BY UF
+            ),
+            CTE_Desovas AS (
+                SELECT d.UF, COUNT(d.codigo_anilha) AS total_desovas, 
+                       SUM(n.n_ovos) AS total_ovos, SUM(n.n_filhotes) AS total_filhotes
+                FROM Desova d
+                JOIN Ninho n ON d.codigo_estaca = n.codigo_estaca
+                GROUP BY d.UF
+            ),
+            CTE_Tartarugas AS (
+                SELECT UF, COUNT(DISTINCT codigo_anilha) AS qtd_tartarugas
+                FROM (
+                    SELECT UF, codigo_anilha FROM Resgate_Encalhe UNION
+                    SELECT UF, codigo_anilha FROM Pesca UNION
+                    SELECT UF, codigo_anilha FROM Desova
+                ) GROUP BY UF
+            )
+
+            -- SELEÇÃO FINAL: CONSOLIDANDO TODAS AS CTEs POR ESTADO
+            SELECT 
+                b.UF AS "Estado",
+
+                -- Estrutura Física
+                NVL(l.qtd_lojas, 0) AS "Lojas",
+                NVL(m.qtd_museus, 0) AS "Museus",
+                NVL(a.qtd_areas, 0) AS "Áreas de Monitoramento",
+
+                -- Financeiro e Público
+                NVL(p.total_pedidos, 0) + NVL(i.total_ingressos, 0) AS "Arrecadação Total (R$)",
+                NVL(p.qtd_clientes, 0) AS "Clientes",
+                NVL(i.qtd_visitantes, 0) AS "Visitantes",
+
+                -- Equipe Base
+                NVL(eq.qtd_funcionarios, 0) AS "Funcionários",
+                NVL(eq.qtd_pesquisadores, 0) AS "Pesquisadores",
+                NVL(eq.qtd_artesaos, 0) AS "Artesãos",
+                NVL(eq.custo_equipe, 0) AS "Custo Equipe Local (R$)",
+
+                -- Eventos Gerais
+                NVL(r.total_resgates, 0) + NVL(pe.total_pescas, 0) + NVL(d.total_desovas, 0) AS "Total de Eventos",
+                NVL(t.qtd_tartarugas, 0) AS "Tartarugas Monitoradas",
+
+                -- Detalhamento de Resgates e Reabilitação
+                NVL(r.total_resgates, 0) AS "Total Resgates",
+                ROUND(NVL(r.total_resgates, 0) / NULLIF(a.qtd_areas, 0), 2) AS "Média Resgates/Área",
+                ROUND(
+                    (NVL(r.qtd_reab_resgate, 0) + NVL(pe.qtd_reab_pesca, 0)) * 100.0 / 
+                    NULLIF(NVL(r.total_resgates, 0) + NVL(pe.total_pescas, 0), 0), 2
+                ) AS "Taxa de Reabilitação (%)",
+
+                -- Detalhamento de Pescas
+                NVL(pe.total_pescas, 0) AS "Total Pescas",
+                NVL(pe.pescas_monitoradas, 0) AS "Pescas Monitoradas",
+
+                -- Detalhamento de Desovas
+                NVL(d.total_desovas, 0) AS "Total Desovas",
+                ROUND(NVL(d.total_filhotes, 0) * 100.0 / NULLIF(d.total_ovos, 0), 2) AS "Taxa de Eclosão (%)"
+
+            FROM (SELECT DISTINCT UF FROM Base) b
+            LEFT JOIN CTE_Lojas l ON b.UF = l.UF
+            LEFT JOIN CTE_Museus m ON b.UF = m.UF
+            LEFT JOIN CTE_Areas a ON b.UF = a.UF
+            LEFT JOIN CTE_Pedidos p ON b.UF = p.UF
+            LEFT JOIN CTE_Ingressos i ON b.UF = i.UF
+            LEFT JOIN CTE_Equipe eq ON b.UF = eq.UF 
+            LEFT JOIN CTE_Resgates r ON b.UF = r.UF
+            LEFT JOIN CTE_Pescas pe ON b.UF = pe.UF
+            LEFT JOIN CTE_Desovas d ON b.UF = d.UF
+            LEFT JOIN CTE_Tartarugas t ON b.UF = t.UF
+            ORDER BY "Arrecadação Total (R$)" DESC, b.UF;
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(sql)
+            resultados = cursor.fetchall()
+
+        if not resultados:
+            print("\n[Aviso] Nenhum dado encontrado para gerar o dashboard.")
+            return
+
+        # Desempacotando e imprimindo cada linha em formato de "Card"
+        for row in resultados:
+            (uf, lojas, museus, areas, arrecadacao, clientes, visitantes,
+             funcionarios, pesquisadores, artesaos, custo_equipe,
+             total_eventos, tartarugas, total_resgates, media_resgates,
+             taxa_reab, total_pescas, pescas_monit, total_desovas, taxa_eclosao) = row
+
+            # Tratamento de valores None que o Oracle pode retornar devido ao NULLIF
+            media_resgates = media_resgates if media_resgates is not None else 0.0
+            taxa_reab = taxa_reab if taxa_reab is not None else 0.0
+            taxa_eclosao = taxa_eclosao if taxa_eclosao is not None else 0.0
+
+            print(f"\n[{uf}] RELATÓRIO ESTADUAL ".ljust(75, "-"))
+            
+            print(f" 🏢 ESTRUTURA:   {lojas} Loja(s) | {museus} Museu(s) | {areas} Área(s) de Monitoramento")
+            
+            print(f" 💰 FINANCEIRO:  Arrecadação Total: R$ {arrecadacao:,.2f}")
+            print(f"                 Público Atendido: {clientes} Cliente(s) | {visitantes} Visitante(s)")
+            
+            print(f" 👥 EQUIPE:      Custo Local: R$ {custo_equipe:,.2f}")
+            print(f"                 Membros: {funcionarios} Funcionário(s) | {pesquisadores} Pesquisador(es) | {artesaos} Artesão(s)")
+            
+            print(f" 🐢 AMBIENTAL:   Total de Eventos: {total_eventos} | Tartarugas Monitoradas: {tartarugas}")
+            print(f"                 - Resgates: {total_resgates} (Média por Área: {media_resgates:.1f})")
+            print(f"                 - Pescas:   {total_pescas} ({pescas_monit} monitoradas)")
+            print(f"                 - Desovas:  {total_desovas} (Taxa de Eclosão: {taxa_eclosao:.1f}%)")
+            print(f"                 >> Taxa Geral de Reabilitação (Pesca/Resgate): {taxa_reab:.1f}%")
+        
+        print("\n" + "=" * 75)
+
+    except Exception as e:
+        print("\n[Erro] Falha ao executar a consulta do dashboard.")
+        print(e)
+
+
 
 # MENU PRINCIPAL
 def menu_principal():
@@ -1263,7 +1444,7 @@ def menu_principal():
     print("2 - Museu")
     print("3 - Loja")
     print("4 - Cadastrar nova unidade")
-    print("5 - UMA DAS CONSULTAS DO RELATORIO")
+    print("5 - Resumo operacional por base")
     print("0 - Sair")
 
 
@@ -1323,7 +1504,7 @@ def main():
                 print("Somente usuários com credencial de gerente podem cadastrar novas unidades.")
 
             elif opcao == "5":
-                print("\nFuncionalidade em desenvolvimento.")
+                exibir_dashboard_estados(conn)
 
             elif opcao == "0":
 
