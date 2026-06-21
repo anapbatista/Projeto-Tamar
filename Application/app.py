@@ -268,7 +268,7 @@ def consultar_pedidos(conn, unidade):
 def obter_data_hora_evento():
     """Captura a data e hora verificando e impedindo que seja no futuro."""
     while True:
-        dt_str = input("\nData e Hora do evento (DD/MM/AAAA HH): ").strip()
+        dt_str = input("\nData e Hora do evento (DD/MM/AAAA HH (00-23): ").strip()
         try:
             dt_obj = datetime.strptime(dt_str, "%d/%m/%Y %H")
             if dt_obj > datetime.now():
@@ -276,7 +276,7 @@ def obter_data_hora_evento():
                 continue
             return dt_obj.strftime("%d/%m/%Y %H:00:00")
         except ValueError:
-            print("[Erro] Formato inválido. Digite no padrão DD/MM/AAAA HH (Ex: 21/06/2026 14).")
+            print("[Erro] Formato inválido. Digite no padrão DD/MM/AAAA HH (00-23) (Ex: 21/06/2026 14).")
 
 def verificar_conflito_temporal(cursor, codigo_anilha, data_hora_str):
     cursor.execute("""
